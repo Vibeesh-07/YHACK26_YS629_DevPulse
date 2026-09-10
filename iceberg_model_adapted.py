@@ -121,7 +121,11 @@ CONFIG = {
     "OCEAN_CLIM_RES_DEG": 2.0,
 
     # Quality control on the observed dataset
-    "MAX_QC_FLAG": 20,      # rows with `flags` above this are dropped (see _load_one_iceberg)
+    # flags is a BITMASK (not a quality score). Set to 255 to accept all flag combinations.
+    # Specific bad bits can be excluded via EXCLUDE_FLAG_BITS (see _load_one_iceberg).
+    # Bit meanings: 0=low-res, 1=interpolated, 2=near-land, 6=SAR-derived, 7=manual-edit
+    "MAX_QC_FLAG": 255,     # accept all flag values (flags field is a bitmask, not a score)
+    "EXCLUDE_FLAG_BITS": 0, # bitmask of flag bits to REJECT (0 = reject nothing extra)
     "VALID_MASK_VALUES": (0,),  # 0 = open ocean / free-drifting in this dataset
 
     "MIN_VOLUME": 6e6,      # m^3, stop tracking below this (as in the original script)
@@ -184,7 +188,7 @@ def _julian_to_datetime(yyyyddd):
     return pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(days=doy - 1)
 
 
-def _load_one_iceberg(path, max_qc_flag, valid_mask_values):
+def _load_one_iceberg(path, max_qc_flag, valid_mask_values, exclude_flag_bits=0):
     """Read and clean a single iceberg CSV from the observed dataset."""
     berg_id = os.path.splitext(os.path.basename(path))[0]
     df = pd.read_csv(path)
@@ -192,13 +196,25 @@ def _load_one_iceberg(path, max_qc_flag, valid_mask_values):
     df["berg_id"] = berg_id
     df["datetime"] = df["date"].apply(_julian_to_datetime)
 
-    # Quality control: drop clearly bad rows.
-    #  - negative/zero area is not a real observation
-    #  - mask flags land-fast / grounded / otherwise unfree-drifting ice
-    #  - flags above MAX_QC_FLAG mark low-confidence fixes in this database
-    df = df[(df["size"] > 0)
-            & (df["mask"].isin(valid_mask_values))
-            & (df["flags"] <= max_qc_flag)].copy()
+    # Fix 1: Negative size values are instrument/interpolation artifacts — drop them
+    #         explicitly with a warning so they are visible.
+    neg_size = (df["size"] < 0).sum()
+    if neg_size > 0:
+        print(f"  [preprocess] {berg_id}: dropping {neg_size} rows with negative size values")
+        df = df[df["size"] >= 0].copy()
+
+    # Fix 2: Quality control
+    #  - size == 0 means no area measurement — not usable for physics
+    #  - mask != 0 means land-fast / grounded / otherwise not freely drifting
+    #  - flags: MAX_QC_FLAG=255 accepts all flag values (flags is a bitmask, not a score).
+    #           EXCLUDE_FLAG_BITS allows rejecting specific bitmask bits if needed.
+    flag_mask_ok = (df["flags"] & exclude_flag_bits) == 0 if exclude_flag_bits else True
+    df = df[
+        (df["size"] > 0)
+        & (df["mask"].isin(valid_mask_values))
+        & (df["flags"] <= max_qc_flag)
+        & flag_mask_ok
+    ].copy()
 
     df = df.sort_values("datetime").reset_index(drop=True)
 
@@ -213,15 +229,25 @@ def _load_one_iceberg(path, max_qc_flag, valid_mask_values):
     return df
 
 
-def load_observed_icebergs(obs_dir, max_qc_flag=20, valid_mask_values=(0,)):
+def load_observed_icebergs(obs_dir, max_qc_flag=255, valid_mask_values=(0,),
+                            exclude_flag_bits=0):
     """
     Load every iceberg CSV in `obs_dir`.
+
+    Parameters
+    ----------
+    obs_dir          : folder containing the iceberg tracking CSVs
+    max_qc_flag      : upper bound on the flags field. Default 255 = accept all
+                       (flags is a bitmask, not a quality score)
+    valid_mask_values: tuple of mask values to keep. 0 = open ocean / freely drifting.
+    exclude_flag_bits: bitmask of flag bits to REJECT regardless of max_qc_flag.
+                       E.g. exclude_flag_bits=2 drops interpolated-position rows.
 
     Returns
     -------
     obs_all : concatenated, cleaned DataFrame of every observation
               (used to build the empirical ocean-current climatology)
-    seeds   : one row per iceberg = its first valid observation,
+    seeds   : one row per iceberg = its first valid observation (size > 0),
               used to seed the parent-iceberg simulations with REAL
               starting positions/dates/sizes instead of synthetic seeds.
     """
@@ -230,19 +256,36 @@ def load_observed_icebergs(obs_dir, max_qc_flag=20, valid_mask_values=(0,)):
         raise FileNotFoundError(f"No iceberg CSVs found in {obs_dir}")
 
     frames = []
+    skipped_no_data = []
     for f in files:
         try:
-            d = _load_one_iceberg(f, max_qc_flag, valid_mask_values)
+            d = _load_one_iceberg(f, max_qc_flag, valid_mask_values, exclude_flag_bits)
             if len(d):
                 frames.append(d)
+            else:
+                # Fix 3: Berg has no usable rows after cleaning — log and skip gracefully
+                berg_id = os.path.splitext(os.path.basename(f))[0]
+                skipped_no_data.append(berg_id)
         except Exception as e:
             print(f"  [skip] {f}: {e}")
 
+    if skipped_no_data:
+        print(f"  [preprocess] {len(skipped_no_data)} icebergs skipped (no valid open-ocean "
+              f"rows with size > 0): {', '.join(skipped_no_data[:10])}"
+              + (" ..." if len(skipped_no_data) > 10 else ""))
+
     obs_all = pd.concat(frames, ignore_index=True)
 
-    seeds = (obs_all.sort_values("datetime")
-                     .groupby("berg_id", as_index=False)
-                     .first())
+    # Fix 4: Build seeds only from rows that have a measurable size.
+    #         size=0 rows are retained in obs_all for track continuity but
+    #         cannot be used as simulation starting points.
+    obs_with_size = obs_all[obs_all["size"] > 0]
+    seeds = (obs_with_size.sort_values("datetime")
+                          .groupby("berg_id", as_index=False)
+                          .first())
+    print(f"  [preprocess] {seeds['berg_id'].nunique()} icebergs have valid seeds "
+          f"({len(obs_all)} total clean rows, "
+          f"{len(obs_with_size)} with measured size > 0)")
     return obs_all, seeds
 
 
