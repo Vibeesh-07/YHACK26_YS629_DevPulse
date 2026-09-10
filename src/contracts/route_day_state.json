@@ -1,0 +1,51 @@
+{
+  "day": 3,
+  "total_days": 7,
+  "status": {
+    "hazards_nearby": 3,
+    "route_confidence_pct": 87
+  },
+  "kpis": {
+    "route_distance_nm": 142.0,
+    "closest_hazard_nm": 4.2,
+    "icebergs_tracked": 3
+  },
+  "navigation": {
+    "start": {
+      "name": "Start",
+      "coords": [-63.5, -58.2]
+    },
+    "destination": {
+      "name": "Destination",
+      "coords": [-60.8, -52.4]
+    },
+    "route_polyline": [
+      [-63.50, -58.20],
+      [-63.20, -57.40],
+      [-62.80, -55.90],
+      [-62.20, -54.10],
+      [-61.50, -53.20],
+      [-60.80, -52.40]
+    ]
+  },
+  "hazards": [
+    {
+      "id": "A-68A-1",
+      "center": [-61.9, -56.5],
+      "iceberg_radius_nm": 1.2,
+      "buffer_radius_nm": 4.5
+    },
+    {
+      "id": "A-68A-2",
+      "center": [-62.4, -54.8],
+      "iceberg_radius_nm": 1.5,
+      "buffer_radius_nm": 5.8
+    },
+    {
+      "id": "B-15-frag",
+      "center": [-61.2, -53.6],
+      "iceberg_radius_nm": 1.0,
+      "buffer_radius_nm": 3.8
+    }
+  ]
+}
