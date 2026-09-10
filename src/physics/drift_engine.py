@@ -84,7 +84,7 @@ class DriftSimulator:
             "days_simulated": n_days,
             "trajectory": [
                 {
-                    "day": d + 1,
+                    "day": d,
                     "date": (pd.Timestamp(start_datetime) + pd.Timedelta(days=d)).strftime("%Y-%m-%d"),
                     "lat": round(clean_lat[d], 4),
                     "lon": round(clean_lon[d], 4),
@@ -102,19 +102,21 @@ class DriftSimulator:
 def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATOLOGY, output_contract="src/contracts/route_day_state.json"):
     """
     STEP 2: Main execution function.
-    Takes Step 1 output state and simulates forward drift for all corridor icebergs.
+    Takes Step 1 output state and simulates forward drift for all corridor icebergs
+    over the voyage horizon (Day 0 departure through Day X destination).
     """
     simulator = DriftSimulator(climatology_path)
 
     start_date = step1_state.get("forecast_start_date", datetime.utcnow().strftime("%Y-%m-%d"))
     icebergs = step1_state.get("icebergs", [])
 
-    print(f"\n[Step 2] Simulating {len(icebergs)} icebergs over a {forecast_days}-day horizon from {start_date}...")
+    n_sim_days = forecast_days + 1
+    print(f"\n[Step 2] Simulating {len(icebergs)} icebergs over a {forecast_days}-day voyage horizon (Days 0 to {forecast_days}) from {start_date}...")
     simulations = []
 
     for berg in icebergs:
         print(f"  * Simulating {berg['id']} at ({berg['lat']}, {berg['lon']})...")
-        sim_res = simulator.simulate_iceberg(berg, start_date, ndays=forecast_days)
+        sim_res = simulator.simulate_iceberg(berg, start_date, ndays=n_sim_days)
         simulations.append(sim_res)
 
     print(f"\n[Step 2] Running Monte Carlo ensemble (N=50 runs/berg) for {len(icebergs)} icebergs...")
@@ -126,7 +128,7 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
         ocean_clim=simulator.ocean_clim,
         land_mask_check=simulator.land_mask_check,
         n_runs=50,
-        ndays=forecast_days,
+        ndays=n_sim_days,
         safety_buffer_nm=3.0
     )
 
@@ -135,13 +137,14 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
     start_coords = step1_state.get("start_coords", [-63.5, -58.2])
     dest_coords = step1_state.get("dest_coords", [-60.8, -52.4])
 
-    for day_idx in range(forecast_days):
-        day_num = day_idx + 1
+    for day_idx in range(n_sim_days):
+        day_num = day_idx
         hazards_for_day = hazards_by_day.get(day_num, [])
 
         day_state = {
             "day": day_num,
             "total_days": forecast_days,
+            "date": (pd.Timestamp(start_date) + pd.Timedelta(days=day_num)).strftime("%Y-%m-%d"),
             "status": {
                 "hazards_nearby": len(hazards_for_day),
                 "route_confidence_pct": max(60, 95 - day_num * 2)
@@ -167,11 +170,11 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
 
     # Save representative state (Day 3 or last available day) to the standard contract file
     if output_contract and len(daily_hazard_states) > 0:
-        rep_idx = min(2, len(daily_hazard_states) - 1)
+        rep_idx = min(3, len(daily_hazard_states) - 1)
         os.makedirs(os.path.dirname(output_contract), exist_ok=True)
         with open(output_contract, "w") as f:
             json.dump(daily_hazard_states[rep_idx], f, indent=2)
-        print(f"\n  [Step 2] Representative Day {rep_idx + 1} state saved to {output_contract}")
+        print(f"\n  [Step 2] Representative Day {daily_hazard_states[rep_idx]['day']} state saved to {output_contract}")
 
     return {
         "forecast_days": forecast_days,

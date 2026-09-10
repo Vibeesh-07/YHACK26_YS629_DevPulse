@@ -156,7 +156,7 @@ def run_monte_carlo_ensemble(berg_info, start_datetime, era5, ocean_clim, land_m
         total_hazard_nm = round(r_iceberg_nm + r95_dispersion_nm + safety_buffer_nm, 2)
 
         daily_stats.append({
-            "day": d + 1,
+            "day": d,
             "date": (start_ts + pd.Timedelta(days=d)).strftime("%Y-%m-%d"),
             "centroid": [round(centroid_lat, 4), round(centroid_lon, 4)],
             "iceberg_radius_nm": r_iceberg_nm,
@@ -180,7 +180,7 @@ def compute_corridor_monte_carlo_hazards(icebergs, start_datetime, era5, ocean_c
                                          n_runs=50, ndays=7, safety_buffer_nm=3.0):
     """
     Runs Monte Carlo ensemble simulations for all icebergs in the corridor
-    and organizes dynamic hazard obstacles for each day (1..ndays).
+    and organizes dynamic hazard obstacles for each day (0..ndays-1).
     """
     mc_results = []
     for berg in icebergs:
@@ -199,7 +199,7 @@ def compute_corridor_monte_carlo_hazards(icebergs, start_datetime, era5, ocean_c
     # Reorganize by day for routing & dashboard contracts
     hazards_by_day = {}
     for d in range(ndays):
-        day_num = d + 1
+        day_num = d
         hazards_by_day[day_num] = []
 
         for res in mc_results:

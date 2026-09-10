@@ -240,19 +240,20 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
     # This is independent of how the A* route shape changes due to iceberg drift.
     # Using straight-line distance as baseline keeps the ship position deterministic.
     baseline_total_nm = haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1])
-    baseline_daily_nm = baseline_total_nm / float(forecast_days) if forecast_days > 1 else baseline_total_nm
+    baseline_daily_nm = baseline_total_nm / float(forecast_days) if forecast_days > 0 else baseline_total_nm
 
-    print(f"\n[Step 3] Solving Dynamic Multi-Day Routes from Current Vessel Positions (Days 1 to {forecast_days})...")
-    print(f"         Baseline voyage: {round(baseline_total_nm, 1)} nm | Daily advance: {round(baseline_daily_nm, 1)} nm/day")
+    num_day_states = len(daily_hazard_states) if daily_hazard_states else (forecast_days + 1)
+    print(f"\n[Step 3] Solving Dynamic Multi-Day Routes from Current Vessel Positions (Days 0 to {forecast_days})...")
+    print(f"         Baseline voyage: {round(baseline_total_nm, 1)} nm | {forecast_days} full 24h sailing days (Days 0 to {forecast_days})")
 
-    for day_idx in range(forecast_days):
-        day_num = day_idx + 1
+    for day_idx in range(num_day_states):
+        day_num = day_idx
         hazards = daily_hazard_states[day_idx]["hazards"] if day_idx < len(daily_hazard_states) else []
 
         rem_straight_nm = haversine_nm(current_pos[0], current_pos[1], dest_coords[0], dest_coords[1])
 
         # If vessel has arrived at destination or final arrival day
-        if rem_straight_nm < 0.5 or (day_num == forecast_days and day_num > 1 and rem_straight_nm < 3.0):
+        if day_num == forecast_days or rem_straight_nm < 0.5:
             current_pos = [dest_coords[0], dest_coords[1]]
             forward_polyline = [current_pos]
             forward_dist_nm = 0.0

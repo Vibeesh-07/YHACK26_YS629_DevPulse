@@ -186,9 +186,9 @@ async function loadState() {
     const data = await res.json();
     if (data && data.length > 0) {
       multiDayData = data;
-      const totalDays = data[0].total_days || data.length;
+      const totalDays = data[0].total_days || (data.length - 1);
       updateTimelineControls(totalDays);
-      renderDay(1);
+      renderDay(0);
       // Pre-fill form from loaded state
       const nav = data[0].navigation;
       if (nav) {
@@ -214,12 +214,16 @@ function renderDay(dayNum) {
   const dayData = multiDayData.find(d => d.day === dayNum) || multiDayData[0];
   if (!dayData) return;
 
-  const totalDays = dayData.total_days || multiDayData.length || 7;
+  const totalDays = dayData.total_days || (multiDayData.length > 0 ? multiDayData[0].total_days || (multiDayData.length - 1) : 7);
   const ship = getShipDataForDay(dayData);
 
   // Header
-  document.getElementById("header-status-title").textContent =
-    `Route status — day ${dayData.day} of ${totalDays}`;
+  const dayTitle = dayData.day === 0
+    ? `Route status — Day 0 of ${totalDays} (Departure)`
+    : (dayData.day === totalDays
+        ? `Route status — Day ${totalDays} of ${totalDays} (Arrival)`
+        : `Route status — Day ${dayData.day} of ${totalDays}`);
+  document.getElementById("header-status-title").textContent = dayTitle;
   document.getElementById("badge-hazards-text").textContent =
     `${dayData.status.hazards_nearby} hazards nearby`;
   document.getElementById("badge-confidence-text").textContent =
@@ -249,7 +253,9 @@ function renderDay(dayNum) {
   }
   const vesselBadgeEl = document.getElementById("vessel-badge");
   if (vesselBadgeEl) {
-    vesselBadgeEl.textContent = `Day ${dayNum} / ${totalDays}`;
+    vesselBadgeEl.textContent = dayNum === 0
+      ? "Day 0 (Start)"
+      : (dayNum === totalDays ? `Day ${totalDays} (Dest)` : `Day ${dayNum} / ${totalDays}`);
   }
 
   const hazardBadge = document.getElementById("kpi-hazard-status");
@@ -268,9 +274,9 @@ function renderDay(dayNum) {
     `Day ${dayNum} / ${totalDays}`;
 
   const base = new Date("2026-09-10T00:00:00Z");
-  base.setDate(base.getDate() + (dayNum - 1));
+  base.setDate(base.getDate() + dayNum);
   document.getElementById("current-date-label").textContent =
-    base.toISOString().split("T")[0];
+    dayData.date || base.toISOString().split("T")[0];
 
   document.querySelectorAll(".timeline-ticks .tick").forEach(t => {
     t.classList.toggle("active", parseInt(t.dataset.day) === dayNum);
@@ -542,16 +548,17 @@ function updateDraftLine() {
 function updateTimelineControls(totalDays) {
   const slider = document.getElementById("timeline-slider");
   if (slider) {
+    slider.min = 0;
     slider.max = totalDays;
     if (parseInt(slider.value) > totalDays) {
-      slider.value = 1;
+      slider.value = 0;
     }
   }
 
   const ticksContainer = document.getElementById("timeline-ticks");
   if (ticksContainer) {
     ticksContainer.innerHTML = "";
-    for (let d = 1; d <= totalDays; d++) {
+    for (let d = 0; d <= totalDays; d++) {
       const span = document.createElement("span");
       span.className = "tick" + (d === currentDay ? " active" : "");
       span.dataset.day = d;
@@ -573,10 +580,10 @@ function setupEventListeners() {
   // Playback
   document.getElementById("btn-play").addEventListener("click", togglePlayback);
   document.getElementById("btn-prev").addEventListener("click", () => {
-    if (currentDay > 1) renderDay(currentDay - 1);
+    if (currentDay > 0) renderDay(currentDay - 1);
   });
   document.getElementById("btn-next").addEventListener("click", () => {
-    const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : 7;
+    const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : 7;
     if (currentDay < maxDays) renderDay(currentDay + 1);
   });
 
@@ -724,9 +731,9 @@ async function runRecalculate() {
 
     multiDayData = await res.json();
     draftMarkersGroup.clearLayers();
-    const totalDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : days;
+    const totalDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : days;
     updateTimelineControls(totalDays);
-    renderDay(1);
+    renderDay(0);
     updateHeaderStatus(`Route recalculated (${totalDays} travel days) — ${new Date().toLocaleTimeString()}`, false);
   } catch (err) {
     showError("Calculation failed: " + err.message);
@@ -821,9 +828,9 @@ function togglePlayback() {
     if (multiDayData.length === 0) { isPlaying = false; return; }
     icon.textContent = "❚❚";
     playInterval = setInterval(() => {
-      const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : 7;
+      const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : 7;
       let next = currentDay + 1;
-      if (next > maxDays) next = 1;
+      if (next > maxDays) next = 0;
       renderDay(next);
     }, 1500);
   } else {
