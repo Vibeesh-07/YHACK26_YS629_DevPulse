@@ -236,7 +236,14 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
     history_polyline = [current_pos]
     dist_traveled_so_far = 0.0
 
+    # Fixed daily advance: ship travels a constant fraction of the baseline straight-line distance each day.
+    # This is independent of how the A* route shape changes due to iceberg drift.
+    # Using straight-line distance as baseline keeps the ship position deterministic.
+    baseline_total_nm = haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1])
+    baseline_daily_nm = baseline_total_nm / float(forecast_days) if forecast_days > 1 else baseline_total_nm
+
     print(f"\n[Step 3] Solving Dynamic Multi-Day Routes from Current Vessel Positions (Days 1 to {forecast_days})...")
+    print(f"         Baseline voyage: {round(baseline_total_nm, 1)} nm | Daily advance: {round(baseline_daily_nm, 1)} nm/day")
 
     for day_idx in range(forecast_days):
         day_num = day_idx + 1
@@ -366,10 +373,12 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
         }
         all_days_data.append(day_payload)
 
-        # ── Advance the vessel for the next day (Day d+1) along the planned dynamic route ──
+        # ── Advance the vessel for the next day along the CURRENT DAY'S forward route ──
+        # We advance by exactly baseline_daily_nm (fixed per-day travel, 1/N of total voyage).
+        # This keeps ship progression independent of each day's A* route shape (which changes
+        # as icebergs drift). The forward route is re-planned fresh each day from the new position.
         if day_num < forecast_days:
-            remaining_transitions = forecast_days - day_num
-            sail_step_nm = forward_dist_nm / float(remaining_transitions)
+            sail_step_nm = baseline_daily_nm
             sliced_pts, next_pos, seg_heading = slice_polyline_by_distance(forward_polyline, sail_step_nm)
 
             dist_traveled_so_far += sail_step_nm
