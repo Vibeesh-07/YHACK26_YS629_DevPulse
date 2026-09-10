@@ -60,6 +60,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if os.path.exists(MULTI_DAY_STATE_PATH):
                 with open(MULTI_DAY_STATE_PATH, "r") as f:
                     data = json.load(f)
+
+                # Detect stale contracts (generated before buffer cap fix).
+                # Stale contracts lack 'total_hazard_radius_nm_uncapped' in hazards.
+                # Strip hazards from stale day-entries so the UI shows "Run a route" 
+                # instead of misleading old uncapped values.
+                for day_entry in data:
+                    hazards = day_entry.get("hazards", [])
+                    if hazards and "total_hazard_radius_nm_uncapped" not in hazards[0]:
+                        day_entry["hazards"] = []
+                        day_entry["_stale"] = True
             else:
                 data = []
 
