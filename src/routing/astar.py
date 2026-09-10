@@ -196,7 +196,27 @@ def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards):
                 f_n = tentative_g + h_n
                 heapq.heappush(open_heap, (f_n, h_n, (nr, nc)))
 
-    # Fallback if path blocked completely
+    # Fallback if path blocked completely: navigate to the closest reachable water position
+    if visited:
+        best_visited = min(visited, key=lambda n: heuristic(n[0], n[1]))
+        path = [best_visited]
+        curr = best_visited
+        while curr in came_from:
+            curr = came_from[curr]
+            path.append(curr)
+        path.reverse()
+        fallback_wps = [[float(start_coords[0]), float(start_coords[1])]]
+        for r, c in path[1:]:
+            lat, lon = cost_grid.node_to_coords(r, c)
+            fallback_wps.append([round(lat, 4), round(lon, 4)])
+        return {
+            "success": False,
+            "waypoints": fallback_wps,
+            "total_distance_nm": round(haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1]), 2),
+            "path_cost": float("inf"),
+            "nodes_evaluated": nodes_evaluated
+        }
+
     return {
         "success": False,
         "waypoints": [[start_coords[0], start_coords[1]], [dest_coords[0], dest_coords[1]]],

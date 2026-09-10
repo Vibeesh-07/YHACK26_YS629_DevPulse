@@ -185,7 +185,7 @@ def calculate_closest_hazard_nm(route_polyline, hazards):
     return round(float(min_dist), 2)
 
 
-def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
+def solve_multiday_routes(step1_state, step2_output, res_deg=None):
     """
     Solves optimal collision-free routes for each forecast day (Days 1 through N).
     Receding-Horizon Dynamic Routing:
@@ -210,18 +210,33 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
         dest_coords = find_nearest_water_coord(dest_coords, land_mask_fn)
         print(f"  [Notice] Destination was on land; snapped to nearest navigable water: {dest_coords}")
 
+    # Determine adaptive grid resolution based on corridor bounding box dimensions
+    lat_span = bbox["max_lat"] - bbox["min_lat"]
+    lon_span = bbox["max_lon"] - bbox["min_lon"]
+    max_span = max(lat_span, lon_span)
+    if res_deg is not None:
+        actual_res = res_deg
+    elif max_span > 20.0:
+        actual_res = 0.25  # ~15 nm resolution for continental/inter-ocean voyages (>1500 nm)
+    elif max_span > 8.0:
+        actual_res = 0.12  # ~7 nm resolution for regional transits (500 - 1500 nm)
+    else:
+        actual_res = 0.06  # ~3.6 nm high resolution for local navigation corridors (<500 nm)
+
     # Cost grid initialized lazily if obstacle avoidance is required
     cost_grid = None
 
-    def get_or_build_cost_grid():
+    def get_or_build_cost_grid(grid_bbox=None, grid_res=None):
         nonlocal cost_grid
-        if cost_grid is not None:
+        target_bbox = grid_bbox or bbox
+        target_res = grid_res or actual_res
+        if grid_bbox is None and cost_grid is not None:
             return cost_grid
         from src.data.land_mask import build_land_mask_grid
         import numpy as _np_lm
-        _tmp_lats = _np_lm.arange(bbox["min_lat"], bbox["max_lat"] + res_deg, res_deg)
-        _tmp_lons = _np_lm.arange(bbox["min_lon"], bbox["max_lon"] + res_deg, res_deg)
-        print(f"  Building land mask for {len(_tmp_lats)}x{len(_tmp_lons)} grid…")
+        _tmp_lats = _np_lm.arange(target_bbox["min_lat"], target_bbox["max_lat"] + target_res, target_res)
+        _tmp_lons = _np_lm.arange(target_bbox["min_lon"], target_bbox["max_lon"] + target_res, target_res)
+        print(f"  Building land mask for {len(_tmp_lats)}x{len(_tmp_lons)} grid (res={target_res}°)...")
         land_grid, _ = build_land_mask_grid(_tmp_lats, _tmp_lons)
         sic_fn = None
         try:
@@ -233,9 +248,11 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                 return float(val) if not np.isnan(val) else 0.0
         except Exception:
             pass
-        cost_grid = CostGrid(bbox, res_deg=res_deg, land_mask_fn=land_mask_fn,
-                             sic_fn=sic_fn, land_grid=land_grid)
-        return cost_grid
+        cg = CostGrid(target_bbox, res_deg=target_res, land_mask_fn=land_mask_fn,
+                      sic_fn=sic_fn, land_grid=land_grid)
+        if grid_bbox is None:
+            cost_grid = cg
+        return cg
 
     all_days_data = []
 
@@ -319,6 +336,22 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                 # Standard 2D Risk-Aware A* pathfinding from CURRENT POSITION to destination
                 cgrid = get_or_build_cost_grid()
                 astar_res = find_risk_aware_route(cgrid, current_pos, dest_coords, hazards)
+
+                # If initial grid boundary blocked the passage around a landmass, dynamically expand bbox and retry!
+                if not astar_res.get("success", False):
+                    print("  [Notice] Initial grid boundary restricted land circumnavigation; expanding bounding box...")
+                    exp_bbox = dict(bbox)
+                    exp_bbox["min_lat"] = max(-80.0, exp_bbox["min_lat"] - 6.0)
+                    exp_bbox["max_lat"] = min(80.0, exp_bbox["max_lat"] + 6.0)
+                    exp_bbox["min_lon"] = max(-180.0, exp_bbox["min_lon"] - 6.0)
+                    exp_bbox["max_lon"] = min(180.0, exp_bbox["max_lon"] + 6.0)
+                    exp_res = max(0.15, actual_res)
+                    exp_cgrid = get_or_build_cost_grid(grid_bbox=exp_bbox, grid_res=exp_res)
+                    retry_res = find_risk_aware_route(exp_cgrid, current_pos, dest_coords, hazards)
+                    if retry_res.get("success", False):
+                        astar_res = retry_res
+                        cgrid = exp_cgrid
+
                 smoothed_polyline = smooth_route_polyline(astar_res["waypoints"], land_mask_fn=land_mask_fn)
 
                 fwd_d = 0.0
