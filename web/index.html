@@ -217,32 +217,34 @@
           <span class="kpi-hint" id="kpi-progress-hint">Traveled: &#x2014; nm | Remaining: &#x2014; nm</span>
         </div>
 
-        <!-- KPI Cards -->
-        <div class="kpi-card">
-          <span class="kpi-label">Route distance</span>
-          <div class="kpi-value-container">
-            <span class="kpi-value" id="kpi-distance">&#x2014;</span>
-            <span class="kpi-unit">nm</span>
+        <!-- Secondary KPI Cards Grid -->
+        <div class="kpi-metrics-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Route distance</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="kpi-distance">&#x2014;</span>
+              <span class="kpi-unit">nm</span>
+            </div>
+            <span class="kpi-hint">Optimal path</span>
           </div>
-          <span class="kpi-hint">Optimal collision-free path</span>
-        </div>
 
-        <div class="kpi-card">
-          <span class="kpi-label">Closest hazard</span>
-          <div class="kpi-value-container">
-            <span class="kpi-value" id="kpi-hazard">&#x2014;</span>
-            <span class="kpi-unit">nm</span>
+          <div class="kpi-card">
+            <span class="kpi-label">Closest hazard</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="kpi-hazard">&#x2014;</span>
+              <span class="kpi-unit">nm</span>
+            </div>
+            <span class="kpi-status-badge status-safe" id="kpi-hazard-status">Awaiting route</span>
           </div>
-          <span class="kpi-status-badge status-safe" id="kpi-hazard-status">Awaiting route</span>
-        </div>
 
-        <div class="kpi-card">
-          <span class="kpi-label">Icebergs tracked</span>
-          <div class="kpi-value-container">
-            <span class="kpi-value" id="kpi-icebergs">&#x2014;</span>
-            <span class="kpi-unit">active</span>
+          <div class="kpi-card kpi-card-span-2">
+            <span class="kpi-label">Icebergs tracked</span>
+            <div class="kpi-value-container">
+              <span class="kpi-value" id="kpi-icebergs">&#x2014;</span>
+              <span class="kpi-unit">active</span>
+            </div>
+            <span class="kpi-hint">EWE20 physics + 95% MC dispersion</span>
           </div>
-          <span class="kpi-hint">EWE20 physics + 95% MC dispersion</span>
         </div>
 
         <!-- Iceberg Details List -->

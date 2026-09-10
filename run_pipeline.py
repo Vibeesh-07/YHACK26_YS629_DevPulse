@@ -14,6 +14,11 @@ import json
 import argparse
 from datetime import datetime
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # Import modules from src
 from src.data.corridor import execute_step1
 from src.physics.drift_engine import execute_step2
