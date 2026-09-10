@@ -8,9 +8,9 @@
   },
   "kpis": {
     "route_distance_nm": 262.4,
-    "closest_hazard_nm": 11.11,
+    "closest_hazard_nm": 11.64,
     "icebergs_tracked": 5,
-    "nodes_evaluated": 1429,
+    "nodes_evaluated": 1437,
     "average_speed_knots": 1.6,
     "daily_distance_nm": 37.5,
     "distance_traveled_nm": 65.6,
@@ -1821,57 +1821,57 @@
     {
       "id": "A57A",
       "center": [
-        -62.5072,
-        -55.7268
+        -62.5157,
+        -55.7095
       ],
       "iceberg_radius_nm": 12.12,
-      "mc_95_dispersion_nm": 7.52,
-      "buffer_radius_nm": 22.64,
-      "total_hazard_radius_nm_uncapped": 22.64
+      "mc_95_dispersion_nm": 7.94,
+      "buffer_radius_nm": 23.06,
+      "total_hazard_radius_nm_uncapped": 23.06
     },
     {
       "id": "A66",
       "center": [
-        -59.7483,
-        -49.6562
+        -59.7587,
+        -49.6815
       ],
       "iceberg_radius_nm": 3.3,
-      "mc_95_dispersion_nm": 7.97,
-      "buffer_radius_nm": 14.27,
-      "total_hazard_radius_nm_uncapped": 14.27
+      "mc_95_dispersion_nm": 7.55,
+      "buffer_radius_nm": 13.85,
+      "total_hazard_radius_nm_uncapped": 13.85
     },
     {
       "id": "A68A",
       "center": [
-        -59.3282,
-        -49.6955
+        -59.332,
+        -49.6519
       ],
       "iceberg_radius_nm": 9.77,
-      "mc_95_dispersion_nm": 9.61,
-      "buffer_radius_nm": 22.38,
-      "total_hazard_radius_nm_uncapped": 22.38
+      "mc_95_dispersion_nm": 8.89,
+      "buffer_radius_nm": 21.66,
+      "total_hazard_radius_nm_uncapped": 21.66
     },
     {
       "id": "A68B",
       "center": [
-        -62.6182,
-        -58.1456
+        -62.6303,
+        -58.2064
       ],
       "iceberg_radius_nm": 18.54,
-      "mc_95_dispersion_nm": 9.42,
-      "buffer_radius_nm": 30.96,
-      "total_hazard_radius_nm_uncapped": 30.96
+      "mc_95_dispersion_nm": 9.78,
+      "buffer_radius_nm": 31.32,
+      "total_hazard_radius_nm_uncapped": 31.32
     },
     {
       "id": "A68C",
       "center": [
-        -59.4968,
-        -49.7831
+        -59.5121,
+        -49.8001
       ],
       "iceberg_radius_nm": 15.87,
-      "mc_95_dispersion_nm": 8.33,
-      "buffer_radius_nm": 27.2,
-      "total_hazard_radius_nm_uncapped": 27.2
+      "mc_95_dispersion_nm": 7.84,
+      "buffer_radius_nm": 26.71,
+      "total_hazard_radius_nm_uncapped": 26.71
     }
   ]
 }
