@@ -1,18 +1,74 @@
 {
   "forecast_start_date": "2026-09-10T00:00:00Z",
   "start_coords": [
-    -57.0,
-    -65.0
+    -63.3,
+    -58.3
   ],
   "dest_coords": [
-    -60.5,
-    -60.0
+    -60.8,
+    -52.4
   ],
   "corridor_bbox": {
-    "min_lat": -62.0,
-    "max_lat": -55.5,
-    "min_lon": -67.5,
-    "max_lon": -57.5
+    "min_lat": -64.8,
+    "max_lat": -59.3,
+    "min_lon": -60.8,
+    "max_lon": -49.9
   },
-  "icebergs": []
+  "icebergs": [
+    {
+      "id": "A57A",
+      "lat": -62.51,
+      "lon": -56.0,
+      "length_km": 55.0,
+      "width_km": 36.67,
+      "thickness_m": 350.0,
+      "mass_kg": 635300000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A66",
+      "lat": -59.749,
+      "lon": -49.927,
+      "length_km": 14.98,
+      "width_km": 9.99,
+      "thickness_m": 307.2,
+      "mass_kg": 41380000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A68A",
+      "lat": -59.316,
+      "lon": -49.937,
+      "length_km": 44.31,
+      "width_km": 29.54,
+      "thickness_m": 350.0,
+      "mass_kg": 412200000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A68B",
+      "lat": -62.62,
+      "lon": -58.482,
+      "length_km": 84.1,
+      "width_km": 56.06,
+      "thickness_m": 350.0,
+      "mass_kg": 1485000000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A68C",
+      "lat": -59.495,
+      "lon": -50.049,
+      "length_km": 71.98,
+      "width_km": 47.99,
+      "thickness_m": 350.0,
+      "mass_kg": 1088000000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    }
+  ]
 }
