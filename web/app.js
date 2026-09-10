@@ -120,10 +120,16 @@ function makeVesselPopup(dayData, ship) {
   return `
     <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px">
       <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
-      <div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
-        <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
-        <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
-      </div>
+      ${(ship.progress_pct >= 100 || ship.distance_remaining_nm === 0)
+        ? `<div style="margin:5px 0;padding:4px 6px;background:#f0fdf4;border-radius:4px;border-left:3px solid #10b981">
+             <strong style="color:#15803d">&#x2714; Voyage Completed (100%)</strong><br>
+             <span style="font-size:10.5px;color:#166534">Arrived at destination</span>
+           </div>`
+        : `<div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
+             <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
+             <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
+           </div>`
+      }
       <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
       <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
       <span style="color:#555">Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
@@ -322,9 +328,10 @@ function renderMapLayers(dayData, ship) {
   }
 
   // ── 2. Dynamic Forward Route (Current Vessel Position -> Destination) ──
-  const forwardPoints = (nav.forward_polyline && nav.forward_polyline.length > 1)
+  const isArrived = (ship && ship.progress_pct >= 100) || (ship && ship.distance_remaining_nm === 0);
+  const forwardPoints = (!isArrived && nav.forward_polyline && nav.forward_polyline.length > 1)
     ? nav.forward_polyline
-    : (nav.route_polyline && nav.route_polyline.length > 1 ? nav.route_polyline : null);
+    : (!isArrived && nav.route_polyline && nav.route_polyline.length > 1 ? nav.route_polyline : null);
 
   if (forwardPoints && forwardPoints.length > 1) {
     // Outer emerald glow
@@ -353,11 +360,15 @@ function renderMapLayers(dayData, ship) {
 
   // Moving Ship Marker (positioned at current position P_d)
   if (ship && ship.coords) {
+    const vesselTooltipText = isArrived
+      ? `🚢 MV Explorer — Day ${dayData.day} (100% — Arrived at Destination)`
+      : `🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`;
+
     L.marker(ship.coords, {
       icon: makeVesselIcon(ship),
       zIndexOffset: 1000
     })
-      .bindTooltip(`🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`,
+      .bindTooltip(vesselTooltipText,
         { permanent: false, direction: "top", offset: [0, -18] })
       .bindPopup(makeVesselPopup(dayData, ship))
       .addTo(shipLayerGroup);

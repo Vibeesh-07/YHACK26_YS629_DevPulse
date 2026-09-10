@@ -27,28 +27,6 @@
       "initial_v_vel": -0.1
     },
     {
-      "id": "A66",
-      "lat": -59.749,
-      "lon": -49.927,
-      "length_km": 14.98,
-      "width_km": 9.99,
-      "thickness_m": 307.2,
-      "mass_kg": 41380000000000.0,
-      "initial_u_vel": 0.25,
-      "initial_v_vel": -0.1
-    },
-    {
-      "id": "A68A",
-      "lat": -59.316,
-      "lon": -49.937,
-      "length_km": 44.31,
-      "width_km": 29.54,
-      "thickness_m": 350.0,
-      "mass_kg": 412200000000000.0,
-      "initial_u_vel": 0.25,
-      "initial_v_vel": -0.1
-    },
-    {
       "id": "A68B",
       "lat": -62.62,
       "lon": -58.482,
@@ -56,6 +34,28 @@
       "width_km": 56.06,
       "thickness_m": 350.0,
       "mass_kg": 1485000000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A66",
+      "lat": -62.342,
+      "lon": -53.335,
+      "length_km": 37.63,
+      "width_km": 25.08,
+      "thickness_m": 348.4,
+      "mass_kg": 295900000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A68A",
+      "lat": -62.348,
+      "lon": -53.34,
+      "length_km": 49.26,
+      "width_km": 32.84,
+      "thickness_m": 350.0,
+      "mass_kg": 509600000000000.0,
       "initial_u_vel": 0.25,
       "initial_v_vel": -0.1
     },

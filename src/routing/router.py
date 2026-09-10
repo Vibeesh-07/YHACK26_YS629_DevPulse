@@ -253,8 +253,9 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
 
         # If vessel has arrived at destination or final arrival day
         if rem_straight_nm < 0.5 or (day_num == forecast_days and day_num > 1 and rem_straight_nm < 3.0):
-            forward_polyline = [current_pos, dest_coords] if current_pos != dest_coords else [dest_coords]
-            forward_dist_nm = round(rem_straight_nm, 1)
+            current_pos = [dest_coords[0], dest_coords[1]]
+            forward_polyline = [current_pos]
+            forward_dist_nm = 0.0
             is_direct = True
             nodes_eval = 0
             closest_h = calculate_closest_hazard_nm(forward_polyline, hazards)
@@ -311,13 +312,18 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                                             forward_polyline[1][0], forward_polyline[1][1]) if len(forward_polyline) > 1 else 0.0
 
         # Full combined route for Day d: sailed history + dynamic forward route
-        full_route = history_polyline[:-1] + forward_polyline
+        if forward_dist_nm == 0.0 or current_pos == dest_coords:
+            full_route = list(history_polyline)
+            total_voyage_dist_nm = round(dist_traveled_so_far, 1)
+            progress_pct = 100.0
+        else:
+            full_route = history_polyline[:-1] + forward_polyline
+            total_voyage_dist_nm = round(dist_traveled_so_far + forward_dist_nm, 1)
+            progress_pct = round(min(100.0, (dist_traveled_so_far / max(1.0, total_voyage_dist_nm)) * 100.0), 1)
 
-        total_voyage_dist_nm = round(dist_traveled_so_far + forward_dist_nm, 1)
         total_hours = max(1.0, float(forecast_days) * 24.0)
         avg_speed_knots = round(total_voyage_dist_nm / total_hours, 1)
         daily_run_nm = round(total_voyage_dist_nm / max(1, forecast_days), 1)
-        progress_pct = round(min(100.0, (dist_traveled_so_far / max(1.0, total_voyage_dist_nm)) * 100.0), 1)
 
         confidence_pct = max(65, 99 - day_idx * 2)
         if closest_h < 3.0:
@@ -374,19 +380,25 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
         all_days_data.append(day_payload)
 
         # ── Advance the vessel for the next day along the CURRENT DAY'S forward route ──
-        # We advance by exactly baseline_daily_nm (fixed per-day travel, 1/N of total voyage).
-        # This keeps ship progression independent of each day's A* route shape (which changes
-        # as icebergs drift). The forward route is re-planned fresh each day from the new position.
+        # We advance proportionally based on remaining transitions so the vessel arrives at
+        # destination on the final day, while dynamically re-routing and avoiding drifted hazards.
         if day_num < forecast_days:
-            sail_step_nm = baseline_daily_nm
+            remaining_transitions = forecast_days - day_num
+            sail_step_nm = forward_dist_nm / float(remaining_transitions)
             sliced_pts, next_pos, seg_heading = slice_polyline_by_distance(forward_polyline, sail_step_nm)
+
+            # Snap to destination if on final transition or within 1.0 nm
+            if remaining_transitions == 1 or haversine_nm(next_pos[0], next_pos[1], dest_coords[0], dest_coords[1]) < 1.0:
+                next_pos = [dest_coords[0], dest_coords[1]]
+                if sliced_pts:
+                    sliced_pts[-1] = next_pos
 
             # ── Safety-push next_pos away from next-day drifted hazards ──────────────────
             # After slicing along Day N's route, next_pos may sit inside a hazard that has
             # drifted into that location by Day N+1. Check against Day N+1 hazard positions
-            # and push the ship radially outward to a safe standoff distance.
+            # and push the ship radially outward to a safe standoff distance (unless at destination).
             next_day_idx = day_idx + 1
-            if next_day_idx < len(daily_hazard_states):
+            if next_day_idx < len(daily_hazard_states) and next_pos != dest_coords:
                 next_hazards = daily_hazard_states[next_day_idx]["hazards"]
                 for h in next_hazards:
                     center = h["center"]
@@ -401,7 +413,7 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                         dlat = (push_nm / 60.0) * np.cos(escape_rad)
                         dlon = (push_nm / 60.0) * np.sin(escape_rad) / np.cos(np.radians(center[0]))
                         next_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
-                        print(f"    [Safety] Day {day_num}→{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} (drifted hazard)")
+                        print(f"    [Safety] Day {day_num}->{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} (drifted hazard)")
                         # Update the last sliced point to reflect the corrected position
                         if sliced_pts:
                             sliced_pts[-1] = next_pos
