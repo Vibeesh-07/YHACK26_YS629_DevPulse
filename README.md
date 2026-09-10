@@ -65,7 +65,7 @@ To develop this platform concurrently without blocking, the system is split acro
 - **Core Responsibilities**:
   1. **Corridor Bounding Box (Stage 0)**: Calculate the bounding navigation corridor around `(start_lat, start_lon)` and `(dest_lat, dest_lon)` with a buffer ($\pm 200\text{--}300\text{ km}$) to strictly filter out irrelevant continental data.
   2. **BYU/NIC v7.1 Parser (Stage 1)**: Ingest tracking records, extracting the latest observation date, position, and dimensions (`major_axis_km`, `minor_axis_km`) for all icebergs within the AOI.
-  3. **Environmental Forcing & Sea Ice (Stage 0/1)**: Load and interpolate ERA5 10m wind ($u_{10}, v_{10}$), ocean surface currents ($u_{ocn}, v_{ocn}$), and Sea-Ice Concentration (SIC %). Includes a robust synthetic/fallback generator for offline demos.
+  3. **Environmental Forcing & Sea Ice (Stage 0/1)**: Load and interpolate ERA5 10m wind ($u_{10}, v_{10}$), ocean surface currents ($u_{ocn}, v_{ocn}$), and Sea-Ice Concentration (SIC %). Includes the ERA5 environmental forcing generator (`generate_era5_forcing.py`).
   4. **Mass & Volume Estimator (Stage 2)**: Calculate tabular iceberg volume ($V \approx L \times W \times H$ where $H \approx 200\text{--}250\text{ m}$) and mass ($M = \rho_{ice} \times V$, with $\rho_{ice} \approx 900\text{ kg/m}^3$).
 - **Assigned Files**:
   ```text

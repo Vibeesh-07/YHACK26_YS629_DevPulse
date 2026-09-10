@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antarctic Navigation Decision Support</title>
+  <meta name="description" content="Real-time Antarctic sea-ice navigation with Risk-Aware A* pathfinding, Monte Carlo hazard estimation, and EWE20 iceberg drift physics.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay hidden" id="loading-overlay">
+    <div class="loading-card">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">
+        <div class="loading-title" id="loading-title">Running A* Pipeline...</div>
+        <div class="loading-sub">Monte Carlo ensemble + drift physics</div>
+      </div>
+      <div class="loading-steps">
+        <div class="lstep" id="lstep-1">&#x2B21; Corridor &amp; iceberg detection</div>
+        <div class="lstep" id="lstep-2">&#x2B21; EWE20 drift + Monte Carlo (N=50)</div>
+        <div class="lstep" id="lstep-3">&#x2B21; Risk-Aware A* pathfinding</div>
+        <div class="lstep" id="lstep-4">&#x2B21; Spline smoothing &amp; KPI generation</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header Bar -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="status-indicator">
+          <span class="pulse-dot" id="pulse-dot"></span>
+          <h1 id="header-status-title">Antarctic Navigation &mdash; Ready</h1>
+        </div>
+        <p class="header-subtitle">Weddell &amp; Scotia Corridor &middot; Risk-Aware A* &middot; EWE20 Drift Physics</p>
+      </div>
+      <div class="header-right">
+        <div class="badge badge-warning" id="badge-hazards">
+          <span class="badge-icon">&#x26A0;&#xFE0F;</span>
+          <span id="badge-hazards-text">&#x2014; hazards</span>
+        </div>
+        <div class="badge badge-success" id="badge-confidence">
+          <span class="badge-icon">&#x1F6E1;&#xFE0F;</span>
+          <span id="badge-confidence-text">&#x2014;% confidence</span>
+        </div>
+        <div class="badge badge-info" id="badge-mode">
+          <span class="badge-icon">&#x1F5FA;&#xFE0F;</span>
+          <span id="badge-mode-text">Enter coords or pick on map</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="main-workspace">
+      <!-- Map Area -->
+      <main class="map-viewport">
+        <div id="polar-map"></div>
+
+        <!-- On-map Legend -->
+        <div class="map-legend">
+          <div class="legend-item">
+            <span class="legend-symbol symbol-iceberg"></span>
+            <span>Iceberg core</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-symbol symbol-buffer"></span>
+            <span>95% MC hazard</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-symbol symbol-route"></span>
+            <span>A* route</span>
+          </div>
+          <div class="legend-sep"></div>
+          <div class="legend-item">
+            <span class="legend-dot dot-start"></span>
+            <span>Start</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot-dest"></span>
+            <span>Dest</span>
+          </div>
+        </div>
+
+        <!-- Map click hint toast -->
+        <div class="map-click-hint hidden" id="map-click-hint">
+          <span class="hint-icon">&#x1F446;</span>
+          <span>Click map to place <strong id="hint-next-point">Start</strong> point</span>
+          <button class="hint-cancel" id="hint-cancel">Cancel</button>
+        </div>
+      </main>
+
+      <!-- Right Sidebar -->
+      <aside class="sidebar-kpis">
+
+        <!-- Coordinate Input Panel (always visible) -->
+        <div class="coord-panel">
+          <div class="coord-panel-header">
+            <span class="coord-panel-title">&#x1F4CD; Navigation Parameters</span>
+            <button class="btn-map-click" id="btn-pick-on-map" title="Click map to set waypoints">
+              &#x1F5B1; Pick on map
+            </button>
+          </div>
+
+          <form id="coords-form" autocomplete="off">
+            <div class="coord-row-label">
+              <span class="coord-dot start-dot"></span>
+              <span class="coord-row-title">Start Point</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Latitude</label>
+                <input type="number" step="0.01" id="input-start-lat" value="-63.5" placeholder="-63.5">
+              </div>
+              <div class="form-group">
+                <label>Longitude</label>
+                <input type="number" step="0.01" id="input-start-lon" value="-58.2" placeholder="-58.2">
+              </div>
+            </div>
+
+            <div class="coord-row-label">
+              <span class="coord-dot dest-dot"></span>
+              <span class="coord-row-title">Destination</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Latitude</label>
+                <input type="number" step="0.01" id="input-dest-lat" value="-60.8" placeholder="-60.8">
+              </div>
+              <div class="form-group">
+                <label>Longitude</label>
+                <input type="number" step="0.01" id="input-dest-lon" value="-52.4" placeholder="-52.4">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Departure Date</label>
+              <input type="date" id="input-date" value="2026-09-10">
+            </div>
+
+            <div class="recalc-row">
+              <button type="submit" class="btn btn-primary" id="btn-recalculate">
+                <span id="btn-recalc-icon">&#x1F504;</span>
+                <span id="btn-recalc-label">Recalculate A* Route</span>
+              </button>
+            </div>
+
+            <div class="error-banner hidden" id="error-banner">
+              <span id="error-text">Error</span>
+            </div>
+          </form>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-card">
+          <span class="kpi-label">Route distance</span>
+          <div class="kpi-value-container">
+            <span class="kpi-value" id="kpi-distance">&#x2014;</span>
+            <span class="kpi-unit">nm</span>
+          </div>
+          <span class="kpi-hint">Optimal collision-free path</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">Closest hazard</span>
+          <div class="kpi-value-container">
+            <span class="kpi-value" id="kpi-hazard">&#x2014;</span>
+            <span class="kpi-unit">nm</span>
+          </div>
+          <span class="kpi-status-badge status-safe" id="kpi-hazard-status">Awaiting route</span>
+        </div>
+
+        <div class="kpi-card">
+          <span class="kpi-label">Icebergs tracked</span>
+          <div class="kpi-value-container">
+            <span class="kpi-value" id="kpi-icebergs">&#x2014;</span>
+            <span class="kpi-unit">active</span>
+          </div>
+          <span class="kpi-hint">EWE20 physics + 95% MC dispersion</span>
+        </div>
+
+        <!-- Iceberg Details List -->
+        <div class="iceberg-list-card">
+          <span class="kpi-label">Active Hazard Roster</span>
+          <div class="iceberg-scroll-list" id="iceberg-list">
+            <div class="iceberg-empty-state">Run a route to see active hazards</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Timeline Scrubber -->
+    <footer class="timeline-footer">
+      <div class="playback-controls">
+        <button class="btn-play" id="btn-play" title="Play 7-Day Drift Animation">
+          <span id="play-icon">&#x25B6;</span>
+        </button>
+        <button class="btn-step" id="btn-prev" title="Previous Day">&#x23EE;</button>
+        <button class="btn-step" id="btn-next" title="Next Day">&#x23ED;</button>
+      </div>
+
+      <div class="scrubber-track-container">
+        <input type="range" id="timeline-slider" min="1" max="7" value="1" step="1">
+        <div class="timeline-ticks" id="timeline-ticks">
+          <span class="tick active" data-day="1">Day 1</span>
+          <span class="tick" data-day="2">Day 2</span>
+          <span class="tick" data-day="3">Day 3</span>
+          <span class="tick" data-day="4">Day 4</span>
+          <span class="tick" data-day="5">Day 5</span>
+          <span class="tick" data-day="6">Day 6</span>
+          <span class="tick" data-day="7">Day 7</span>
+        </div>
+      </div>
+
+      <div class="timeline-indicator">
+        <span class="indicator-tag" id="current-day-label">Day 1 / 7</span>
+        <span class="indicator-date" id="current-date-label">&#x2014;</span>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -82,7 +82,7 @@ import os
 import glob
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+from scipy.stats import norm, poisson
 
 try:
     import netCDF4 as nc
@@ -97,7 +97,7 @@ except ImportError:
 
 CONFIG = {
     # Folder holding the real iceberg-tracking CSVs (A-68.csv, B-15Z.csv, ...)
-    "OBS_DIR": "./stats_database_v7.1",
+    "OBS_DIR": "./dataset",
 
     # Folder holding your ERA5 NetCDF downloads
     "ERA5_DIR": "./era5",
@@ -360,12 +360,15 @@ class ERA5Forcing:
         yi = closest_node(lat_pt, self.lat)
         xi = closest_node(lon_pt, self.lon)
 
-        ti1 = int(np.floor(t_index_float))
+        ti1 = max(0, min(int(np.floor(t_index_float)), len(self.time) - 1))
         ti2 = min(ti1 + 1, len(self.time) - 1)
-        dt1 = t_index_float - ti1
-        dt2 = ti2 - t_index_float
-        if dt1 + dt2 == 0:
-            dt1, dt2 = 1.0, 0.0
+        if ti1 == ti2:
+            dt1, dt2 = 0.0, 1.0
+        else:
+            dt1 = t_index_float - ti1
+            dt2 = ti2 - t_index_float
+            if dt1 + dt2 == 0:
+                dt1, dt2 = 1.0, 0.0
 
         ua = self.u_atm[ti1, yi, xi] * dt2 + self.u_atm[ti2, yi, xi] * dt1
         va = self.v_atm[ti1, yi, xi] * dt2 + self.v_atm[ti2, yi, xi] * dt1
@@ -446,6 +449,8 @@ def build_empirical_ocean_climatology(obs_all, era5, cfg):
 
 def _datetime_to_era5_index(dt, era5):
     """Map a real datetime onto a fractional index into era5.time (assumes hours since 1900-01-01, ERA5's usual convention; adjust if your files differ)."""
+    if hasattr(dt, "tz") and dt.tz is not None:
+        dt = dt.tz_localize(None)
     epoch = pd.Timestamp("1900-01-01")
     hours_since_epoch = (dt - epoch).total_seconds() / 3600.0
     # time array assumed monotonic & regularly spaced
@@ -574,19 +579,10 @@ def iceberg_trajectory_parent(bergdims, start_location, start_datetime, prob,
             if prob > 0.0 and l[i] > 3 * xmax and SIC < 0.5 and i % break_days == 0:
                 pfactor = float(break_days * prob)
                 if pfactor < 20:
-                    s = np.arange(0, 20 * 20)
-                    sfact = np.append([1], np.cumprod(s[1:]))
-                    p_dist = np.exp(-pfactor) * (pfactor ** s) / sfact
-                    cutoff = np.where(p_dist < 1e-8)[0]
-                    if len(cutoff):
-                        p_dist[cutoff[0]:] = 0.0
-                    p_dist[0] = 1.0 - np.sum(p_dist[1:])
-                    break_number = int(np.random.choice(s, 1, p=p_dist)[0])
+                    break_number = int(poisson.rvs(pfactor))
                 else:
-                    s = np.arange(0, 300 * 20)
-                    p_dist = norm.pdf(s, pfactor, np.sqrt(pfactor))
-                    p_dist[0] = max(1.0 - np.sum(p_dist[1:]), 0.0)
-                    break_number = int(np.random.choice(s, 1, p=p_dist)[0])
+                    break_number = int(np.random.normal(pfactor, np.sqrt(pfactor)))
+                break_number = max(0, break_number)
 
                 num_breaks[i] = break_number
                 if break_number > 0:
@@ -701,6 +697,11 @@ def main(cfg=CONFIG, n_icebergs=None, run_full_simulation=True):
     u_clim, v_clim, lat_bins, lon_bins, coverage = build_empirical_ocean_climatology(
         obs_all, era5, cfg)
     ocean_clim = (u_clim, v_clim, lat_bins, lon_bins, coverage)
+    
+    # Save the calibrated climatology model artifact
+    clim_path = os.path.join(cfg["OUTPUT_DIR"], "empirical_ocean_climatology.npz")
+    np.savez_compressed(clim_path, u_clim=u_clim, v_clim=v_clim, lat_bins=lat_bins, lon_bins=lon_bins, coverage=coverage)
+    print(f"  Calibrated ocean climatology model artifact saved to {clim_path}")
 
     results = []
     validations = []
@@ -730,8 +731,12 @@ def main(cfg=CONFIG, n_icebergs=None, run_full_simulation=True):
 
 
 if __name__ == "__main__":
-    # Set run_full_simulation=False if ERA5 files aren't in place yet --
-    # this still loads/cleans the real iceberg dataset and builds the
-    # seed table so you can inspect it before pointing at ERA5.
-    main(run_full_simulation=os.path.exists(
+    import argparse
+    parser = argparse.ArgumentParser(description="Calibrate empirical ocean climatology and run iceberg drift simulation.")
+    parser.add_argument("--n-icebergs", "-n", type=int, default=10, help="Number of icebergs to simulate (default: 10, use 0 or --all for all)")
+    parser.add_argument("--all", action="store_true", help="Simulate all available icebergs in dataset")
+    args = parser.parse_args()
+
+    n = None if (args.all or args.n_icebergs == 0) else args.n_icebergs
+    main(n_icebergs=n, run_full_simulation=os.path.exists(
         os.path.join(CONFIG["ERA5_DIR"], CONFIG["ERA5_WIND_FILE"])))

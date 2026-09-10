@@ -21,3 +21,17 @@ Thumbs.db
 output/
 runs/
 *.mat_temp
+
+# Generated ERA5 NetCDF forcing data (too large for GitHub, regenerate with generate_era5_forcing.py)
+era5/*.nc
+era5/*.nc4
+
+# Large binary outputs
+Output_adapted/*.npz
+Output_adapted/*.nc
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
