@@ -89,7 +89,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(content_len).decode("utf-8")
             params = json.loads(body) if body else {}
 
-            start_coords = params.get("start_coords", [-63.5, -58.2])
+            start_coords = params.get("start_coords", [-63.3, -58.3])
             dest_coords = params.get("dest_coords", [-60.8, -52.4])
             date_str = params.get("date", "2026-09-10T00:00:00Z")
             days_raw = params.get("days", 7)
