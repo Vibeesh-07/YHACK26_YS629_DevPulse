@@ -1,0 +1,281 @@
+[
+  {
+    "id": "SCENARIO_1",
+    "title": "South Georgia Land Obstacle Avoidance",
+    "region": "Scotia Sea / South Georgia",
+    "start": [
+      -56.5,
+      -36.5
+    ],
+    "dest": [
+      -52.0,
+      -36.5
+    ],
+    "straight_nm": 270.2,
+    "obstacle": "South Georgia Island (Mount Paget / Neumayer Glacier)",
+    "objective": "Verify ship steers into deep water around the island and NEVER crosses land.",
+    "bbox": {
+      "min_lat": -58.0,
+      "max_lat": -50.5,
+      "min_lon": -39.0,
+      "max_lon": -34.0
+    },
+    "icebergs": [
+      {
+        "id": "A65",
+        "lat": -53.03,
+        "lon": -35.951,
+        "length_km": 68.48,
+        "width_km": 45.65,
+        "mass_kg": 984700000000000.0
+      },
+      {
+        "id": "A68D",
+        "lat": -55.303,
+        "lon": -34.919,
+        "length_km": 67.39,
+        "width_km": 44.93,
+        "mass_kg": 953700000000000.0
+      },
+      {
+        "id": "A66",
+        "lat": -53.941,
+        "lon": -34.161,
+        "length_km": 71.39,
+        "width_km": 47.59,
+        "mass_kg": 1070000000000000.0
+      },
+      {
+        "id": "A68A",
+        "lat": -53.39,
+        "lon": -34.109,
+        "length_km": 62.22,
+        "width_km": 41.48,
+        "mass_kg": 812900000000000.0
+      },
+      {
+        "id": "A68C",
+        "lat": -57.281,
+        "lon": -34.054,
+        "length_km": 45.36,
+        "width_km": 30.24,
+        "mass_kg": 432100000000000.0
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_2",
+    "title": "King George Island to South Orkneys",
+    "region": "Northern Weddell / Scotia Gateway",
+    "start": [
+      -62.2,
+      -58.0
+    ],
+    "dest": [
+      -60.5,
+      -45.0
+    ],
+    "straight_nm": 387.2,
+    "obstacle": "Elephant Island shelf & Scotia Sea tabular iceberg cluster",
+    "objective": "Long-range transit across Scotia Sea avoiding shallow banks and icebergs.",
+    "bbox": {
+      "min_lat": -63.7,
+      "max_lat": -59.0,
+      "min_lon": -60.5,
+      "max_lon": -42.5
+    },
+    "icebergs": [
+      {
+        "id": "A57A",
+        "lat": -62.51,
+        "lon": -56.0,
+        "length_km": 55.0,
+        "width_km": 36.67,
+        "mass_kg": 635300000000000.0
+      },
+      {
+        "id": "A66",
+        "lat": -59.074,
+        "lon": -46.406,
+        "length_km": 46.18,
+        "width_km": 30.79,
+        "mass_kg": 447800000000000.0
+      },
+      {
+        "id": "A68A",
+        "lat": -59.051,
+        "lon": -49.119,
+        "length_km": 43.06,
+        "width_km": 28.71,
+        "mass_kg": 389400000000000.0
+      },
+      {
+        "id": "A68B",
+        "lat": -62.62,
+        "lon": -58.482,
+        "length_km": 84.1,
+        "width_km": 56.06,
+        "mass_kg": 1485000000000000.0
+      },
+      {
+        "id": "A68C",
+        "lat": -59.007,
+        "lon": -47.697,
+        "length_km": 78.28,
+        "width_km": 52.19,
+        "mass_kg": 1287000000000000.0
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_3",
+    "title": "Bransfield Strait Archipelago Transit",
+    "region": "Antarctic Peninsula",
+    "start": [
+      -62.2,
+      -58.8
+    ],
+    "dest": [
+      -63.2,
+      -54.8
+    ],
+    "straight_nm": 125.4,
+    "obstacle": "South Shetland Islands to north, Antarctic Peninsula to south",
+    "objective": "Verify pathfinder threads through the channel without touching either coastline.",
+    "bbox": {
+      "min_lat": -64.7,
+      "max_lat": -60.7,
+      "min_lon": -61.3,
+      "max_lon": -52.3
+    },
+    "icebergs": [
+      {
+        "id": "A57A",
+        "lat": -62.51,
+        "lon": -56.0,
+        "length_km": 55.0,
+        "width_km": 36.67,
+        "mass_kg": 635300000000000.0
+      },
+      {
+        "id": "A66",
+        "lat": -60.79,
+        "lon": -52.367,
+        "length_km": 28.95,
+        "width_km": 19.3,
+        "mass_kg": 168700000000000.0
+      },
+      {
+        "id": "A68A",
+        "lat": -61.876,
+        "lon": -52.36,
+        "length_km": 49.34,
+        "width_km": 32.89,
+        "mass_kg": 511200000000000.0
+      },
+      {
+        "id": "A68B",
+        "lat": -62.62,
+        "lon": -58.482,
+        "length_km": 84.1,
+        "width_km": 56.06,
+        "mass_kg": 1485000000000000.0
+      },
+      {
+        "id": "B15Z",
+        "lat": -61.785,
+        "lon": -54.727,
+        "length_km": 50.77,
+        "width_km": 33.85,
+        "mass_kg": 541300000000000.0
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_4",
+    "title": "Weddell Sea Iceberg Alley Escape",
+    "region": "Weddell Sea Exit / Scotia Sea",
+    "start": [
+      -64.5,
+      -52.0
+    ],
+    "dest": [
+      -60.0,
+      -50.0
+    ],
+    "straight_nm": 275.9,
+    "obstacle": "High density of northward-drifting tabular icebergs (A57A, A68B, A66)",
+    "objective": "Verify dynamic obstacle avoidance where route bends around 95% MC safety buffers.",
+    "bbox": {
+      "min_lat": -66.0,
+      "max_lat": -58.5,
+      "min_lon": -54.5,
+      "max_lon": -47.5
+    },
+    "icebergs": [
+      {
+        "id": "A57A",
+        "lat": -62.771,
+        "lon": -54.191,
+        "length_km": 3.88,
+        "width_km": 2.59,
+        "mass_kg": 2257000000000.0
+      },
+      {
+        "id": "A66",
+        "lat": -59.088,
+        "lon": -47.616,
+        "length_km": 16.77,
+        "width_km": 11.18,
+        "mass_kg": 52620000000000.0
+      },
+      {
+        "id": "A68A",
+        "lat": -58.566,
+        "lon": -48.756,
+        "length_km": 42.47,
+        "width_km": 28.31,
+        "mass_kg": 378800000000000.0
+      },
+      {
+        "id": "A68B",
+        "lat": -62.56,
+        "lon": -54.291,
+        "length_km": 68.6,
+        "width_km": 45.74,
+        "mass_kg": 988400000000000.0
+      },
+      {
+        "id": "A68C",
+        "lat": -58.757,
+        "lon": -47.539,
+        "length_km": 75.74,
+        "width_km": 50.5,
+        "mass_kg": 1205000000000000.0
+      }
+    ]
+  },
+  {
+    "id": "SCENARIO_5",
+    "title": "Drake Passage Deep Trench Open Water",
+    "region": "Drake Passage",
+    "start": [
+      -57.0,
+      -65.0
+    ],
+    "dest": [
+      -60.5,
+      -60.0
+    ],
+    "straight_nm": 261.4,
+    "obstacle": "None (Pure Open Deep Ocean)",
+    "objective": "Baseline sanity check: path should be nearly straight with ~1.0 detour ratio.",
+    "bbox": {
+      "min_lat": -62.0,
+      "max_lat": -55.5,
+      "min_lon": -67.5,
+      "max_lon": -57.5
+    },
+    "icebergs": []
+  }
+]

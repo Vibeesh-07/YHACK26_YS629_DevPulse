@@ -77,7 +77,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             start_coords = params.get("start_coords", [-63.5, -58.2])
             dest_coords = params.get("dest_coords", [-60.8, -52.4])
             date_str = params.get("date", "2026-09-10T00:00:00Z")
-            days = params.get("days", 7)
+            days_raw = params.get("days", 7)
+            try:
+                days = max(1, min(14, int(days_raw)))
+            except (ValueError, TypeError):
+                days = 7
 
             from run_pipeline import run_pipeline
             res = run_pipeline(

@@ -14,12 +14,124 @@ let playInterval = null;
 
 // Map Layer Groups
 let routeLayerGroup;
+let wakeLayerGroup;
+let shipLayerGroup;
 let hazardsLayerGroup;
 let waypointsLayerGroup;
 let draftMarkersGroup;
 
 // Click-to-place state
 let pickMode = null; // null | 'start' | 'dest'
+
+// ─── Math & Geodesic Helpers ──────────────────────────────────────────────────
+
+function calculateBearingJs(lat1, lon1, lat2, lon2) {
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+  const theta = Math.atan2(y, x);
+  return Math.round((((theta * 180) / Math.PI) + 360) % 360);
+}
+
+function haversineNmJs(lat1, lon1, lat2, lon2) {
+  const R_nm = 3440.065;
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+            Math.cos(phi1) * Math.cos(phi2) *
+            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R_nm * c;
+}
+
+function getShipDataForDay(dayData) {
+  if (dayData.ship && dayData.ship.coords) {
+    return dayData.ship;
+  }
+  const nav = dayData.navigation || {};
+  const polyline = nav.route_polyline || [];
+  const totalDist = (dayData.kpis && dayData.kpis.route_distance_nm) || 200;
+  const totalDays = dayData.total_days || 7;
+  const dayNum = dayData.day || 1;
+  const frac = totalDays <= 1 ? 1.0 : Math.min(1.0, Math.max(0.0, (dayNum - 1) / (totalDays - 1)));
+  const targetDist = frac * totalDist;
+  const avgSpeed = +(totalDist / Math.max(1, totalDays * 24)).toFixed(1);
+  const dailyDist = +(totalDist / Math.max(1, totalDays)).toFixed(1);
+
+  if (polyline.length === 0) {
+    return {
+      coords: [-63.5, -58.2],
+      heading_deg: 0,
+      distance_traveled_nm: +(targetDist.toFixed(1)),
+      distance_remaining_nm: +(Math.max(0, totalDist - targetDist).toFixed(1)),
+      progress_pct: +(frac * 100).toFixed(1),
+      average_speed_knots: avgSpeed,
+      daily_distance_nm: dailyDist
+    };
+  }
+
+  const idx = Math.min(polyline.length - 1, Math.floor(frac * (polyline.length - 1)));
+  const nextIdx = Math.min(polyline.length - 1, idx + 1);
+  const p1 = polyline[idx];
+  const p2 = polyline[nextIdx];
+  const heading = calculateBearingJs(p1[0], p1[1], p2[0], p2[1]);
+
+  return {
+    coords: p1,
+    heading_deg: heading,
+    distance_traveled_nm: +(targetDist.toFixed(1)),
+    distance_remaining_nm: +(Math.max(0, totalDist - targetDist).toFixed(1)),
+    progress_pct: +(frac * 100).toFixed(1),
+    average_speed_knots: avgSpeed,
+    daily_distance_nm: dailyDist
+  };
+}
+
+function makeVesselIcon(ship) {
+  const heading = (ship && ship.heading_deg !== undefined) ? ship.heading_deg : 0;
+  return L.divIcon({
+    className: "vessel-div-icon",
+    html: `
+      <div class="vessel-icon-container" title="Research Vessel Explorer">
+        <div class="radar-pulse-ring"></div>
+        <svg class="vessel-marker-svg" viewBox="0 0 36 36" style="transform: rotate(${heading}deg);">
+          <!-- Ship Hull pointing 0 deg (North) -->
+          <path d="M18,2 L27,24 C27,28 22,32 18,34 C14,32 9,28 9,24 Z" 
+                fill="#0284c7" stroke="#38bdf8" stroke-width="2" />
+          <!-- Superstructure -->
+          <polygon points="18,8 23,22 18,19 13,22" fill="#e0f2fe" opacity="0.95" />
+          <!-- Navigation mast light -->
+          <circle cx="18" cy="12" r="2.5" fill="#f59e0b" />
+          <!-- Bow guide line -->
+          <line x1="18" y1="2" x2="18" y2="7" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </div>
+    `,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22]
+  });
+}
+
+function makeVesselPopup(dayData, ship) {
+  return `
+    <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px">
+      <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
+      <div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
+        <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)
+      </div>
+      <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
+      <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
+      <span style="color:#555">Traveled:</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
+      <span style="color:#555">Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong><br>
+      <span style="color:#555">Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong><br>
+      <span style="color:#888;font-size:11px">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</span>
+    </div>
+  `;
+}
 
 // ─── Boot ───────────────────────────────────────────────────────────────────
 
@@ -47,10 +159,12 @@ function initMap() {
     { maxZoom: 16, attribution: "Esri" }
   ).addTo(map);
 
-  routeLayerGroup   = L.layerGroup().addTo(map);
-  hazardsLayerGroup = L.layerGroup().addTo(map);
+  routeLayerGroup     = L.layerGroup().addTo(map);
+  wakeLayerGroup      = L.layerGroup().addTo(map);
+  shipLayerGroup      = L.layerGroup().addTo(map);
+  hazardsLayerGroup   = L.layerGroup().addTo(map);
   waypointsLayerGroup = L.layerGroup().addTo(map);
-  draftMarkersGroup = L.layerGroup().addTo(map);
+  draftMarkersGroup   = L.layerGroup().addTo(map);
 
   // Map click handler for waypoint picking
   map.on("click", onMapClick);
@@ -65,6 +179,8 @@ async function loadState() {
     const data = await res.json();
     if (data && data.length > 0) {
       multiDayData = data;
+      const totalDays = data[0].total_days || data.length;
+      updateTimelineControls(totalDays);
       renderDay(1);
       // Pre-fill form from loaded state
       const nav = data[0].navigation;
@@ -74,6 +190,8 @@ async function loadState() {
         document.getElementById("input-dest-lat").value  = nav.destination.coords[0];
         document.getElementById("input-dest-lon").value  = nav.destination.coords[1];
       }
+      const daysInput = document.getElementById("input-days");
+      if (daysInput) daysInput.value = totalDays;
       updateHeaderStatus("Route loaded from cache", false);
     }
   } catch (e) {
@@ -89,9 +207,12 @@ function renderDay(dayNum) {
   const dayData = multiDayData.find(d => d.day === dayNum) || multiDayData[0];
   if (!dayData) return;
 
+  const totalDays = dayData.total_days || multiDayData.length || 7;
+  const ship = getShipDataForDay(dayData);
+
   // Header
   document.getElementById("header-status-title").textContent =
-    `Route status — day ${dayData.day} of ${dayData.total_days}`;
+    `Route status — day ${dayData.day} of ${totalDays}`;
   document.getElementById("badge-hazards-text").textContent =
     `${dayData.status.hazards_nearby} hazards nearby`;
   document.getElementById("badge-confidence-text").textContent =
@@ -101,6 +222,28 @@ function renderDay(dayNum) {
   document.getElementById("kpi-distance").textContent = dayData.kpis.route_distance_nm;
   document.getElementById("kpi-hazard").textContent   = dayData.kpis.closest_hazard_nm;
   document.getElementById("kpi-icebergs").textContent = dayData.kpis.icebergs_tracked;
+
+  // Vessel Speed & Motion KPIs
+  const speedEl = document.getElementById("kpi-speed");
+  if (speedEl) speedEl.textContent = ship.average_speed_knots || "—";
+  const speedHintEl = document.getElementById("kpi-speed-hint");
+  if (speedHintEl) {
+    speedHintEl.textContent = `Daily run: ~${ship.daily_distance_nm || "—"} nm/day (${totalDays} travel days)`;
+  }
+
+  // Vessel Progress KPIs
+  const progEl = document.getElementById("kpi-progress");
+  if (progEl) progEl.textContent = `${ship.progress_pct || 0}`;
+  const progBarEl = document.getElementById("vessel-progress-bar");
+  if (progBarEl) progBarEl.style.width = `${ship.progress_pct || 0}%`;
+  const progHintEl = document.getElementById("kpi-progress-hint");
+  if (progHintEl) {
+    progHintEl.textContent = `Traveled: ${ship.distance_traveled_nm || 0} nm | Remaining: ${ship.distance_remaining_nm || 0} nm`;
+  }
+  const vesselBadgeEl = document.getElementById("vessel-badge");
+  if (vesselBadgeEl) {
+    vesselBadgeEl.textContent = `Day ${dayNum} / ${totalDays}`;
+  }
 
   const hazardBadge = document.getElementById("kpi-hazard-status");
   if (dayData.kpis.closest_hazard_nm >= 5.0) {
@@ -112,9 +255,10 @@ function renderDay(dayNum) {
   }
 
   // Timeline
-  document.getElementById("timeline-slider").value = dayNum;
+  const slider = document.getElementById("timeline-slider");
+  if (slider) slider.value = dayNum;
   document.getElementById("current-day-label").textContent =
-    `Day ${dayNum} / ${dayData.total_days}`;
+    `Day ${dayNum} / ${totalDays}`;
 
   const base = new Date("2026-09-10T00:00:00Z");
   base.setDate(base.getDate() + (dayNum - 1));
@@ -125,16 +269,20 @@ function renderDay(dayNum) {
     t.classList.toggle("active", parseInt(t.dataset.day) === dayNum);
   });
 
-  renderMapLayers(dayData);
+  renderMapLayers(dayData, ship);
   renderIcebergList(dayData.hazards);
 }
 
 // ─── Map Layers ───────────────────────────────────────────────────────────────
 
-function renderMapLayers(dayData) {
+function renderMapLayers(dayData, ship) {
   routeLayerGroup.clearLayers();
+  wakeLayerGroup.clearLayers();
+  shipLayerGroup.clearLayers();
   hazardsLayerGroup.clearLayers();
   waypointsLayerGroup.clearLayers();
+
+  if (!ship) ship = getShipDataForDay(dayData);
 
   const nav = dayData.navigation;
   const start = nav.start.coords;
@@ -162,9 +310,35 @@ function renderMapLayers(dayData) {
       color: "#10b981", weight: 3, opacity: 0.95,
       lineCap: "round", lineJoin: "round"
     }).addTo(routeLayerGroup);
+
+    // If ship has traveled forward, draw the wake trail in cyan dash
+    if (ship && ship.progress_pct > 0 && ship.coords) {
+      const wakePoints = [start];
+      for (const pt of nav.route_polyline) {
+        wakePoints.push(pt);
+        const dShip = haversineNmJs(pt[0], pt[1], ship.coords[0], ship.coords[1]);
+        if (dShip < 2.0) break;
+      }
+      wakePoints.push(ship.coords);
+      L.polyline(wakePoints, {
+        color: "#38bdf8", weight: 3.5, dashArray: "4,6", opacity: 0.85
+      }).addTo(wakeLayerGroup);
+    }
   }
 
-  // Icebergs + MC hazard rings
+  // Moving Ship Marker
+  if (ship && ship.coords) {
+    L.marker(ship.coords, {
+      icon: makeVesselIcon(ship),
+      zIndexOffset: 1000
+    })
+      .bindTooltip(`🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% - ${ship.average_speed_knots} kn)`,
+        { permanent: false, direction: "top", offset: [0, -18] })
+      .bindPopup(makeVesselPopup(dayData, ship))
+      .addTo(shipLayerGroup);
+  }
+
+  // Icebergs + MC hazard rings (day-specific positions)
   (dayData.hazards || []).forEach(h => {
     const center = h.center;
     const rCoreM   = h.iceberg_radius_nm * METERS_PER_NM;
@@ -322,6 +496,29 @@ function updateDraftLine() {
   } catch (_) {}
 }
 
+function updateTimelineControls(totalDays) {
+  const slider = document.getElementById("timeline-slider");
+  if (slider) {
+    slider.max = totalDays;
+    if (parseInt(slider.value) > totalDays) {
+      slider.value = 1;
+    }
+  }
+
+  const ticksContainer = document.getElementById("timeline-ticks");
+  if (ticksContainer) {
+    ticksContainer.innerHTML = "";
+    for (let d = 1; d <= totalDays; d++) {
+      const span = document.createElement("span");
+      span.className = "tick" + (d === currentDay ? " active" : "");
+      span.dataset.day = d;
+      span.textContent = `Day ${d}`;
+      span.addEventListener("click", () => renderDay(d));
+      ticksContainer.appendChild(span);
+    }
+  }
+}
+
 // ─── Event Listeners ──────────────────────────────────────────────────────────
 
 function setupEventListeners() {
@@ -330,19 +527,87 @@ function setupEventListeners() {
     renderDay(parseInt(e.target.value));
   });
 
-  // Tick clicks
-  document.querySelectorAll(".timeline-ticks .tick").forEach(t => {
-    t.addEventListener("click", () => renderDay(parseInt(t.dataset.day)));
-  });
-
   // Playback
   document.getElementById("btn-play").addEventListener("click", togglePlayback);
   document.getElementById("btn-prev").addEventListener("click", () => {
     if (currentDay > 1) renderDay(currentDay - 1);
   });
   document.getElementById("btn-next").addEventListener("click", () => {
-    if (currentDay < 7) renderDay(currentDay + 1);
+    const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : 7;
+    if (currentDay < maxDays) renderDay(currentDay + 1);
   });
+
+  // Preset selector
+  const presetSelect = document.getElementById("select-preset");
+  const presetCard = document.getElementById("preset-card");
+  const presetDesc = document.getElementById("preset-desc");
+  const presetMeta = document.getElementById("preset-meta");
+
+  const BENCHMARK_PRESETS = {
+    "1": {
+      start: [-56.5, -36.5],
+      dest: [-52.0, -36.5],
+      days: 3,
+      desc: "Direct path intersects South Georgia Island. Verifies A* routes around into open ocean with zero land collision.",
+      meta: "Obstacle: South Georgia | Straight: 270 nm | Duration: 3 days"
+    },
+    "2": {
+      start: [-62.2, -58.0],
+      dest: [-60.5, -45.0],
+      days: 4,
+      desc: "Long-range Scotia Sea transit passing north of Elephant Island and clearing tabular icebergs A68B & A68C.",
+      meta: "Obstacle: Scotia Icebergs | Straight: 387 nm | Duration: 4 days"
+    },
+    "3": {
+      start: [-62.2, -58.8],
+      dest: [-63.2, -54.8],
+      days: 2,
+      desc: "Navigates Bransfield Strait channel between South Shetland Islands and Antarctic Peninsula without touching land.",
+      meta: "Obstacle: Strait / Archipelago | Straight: 125 nm | Duration: 2 days"
+    },
+    "4": {
+      start: [-64.5, -52.0],
+      dest: [-60.0, -50.0],
+      days: 4,
+      desc: "Northbound Weddell Sea 'Iceberg Alley' escape corridor with high density of active drifting icebergs.",
+      meta: "Obstacle: Weddell Gyre Icebergs | Straight: 276 nm | Duration: 4 days"
+    },
+    "5": {
+      start: [-57.0, -65.0],
+      dest: [-60.5, -60.0],
+      days: 3,
+      desc: "Open deep-ocean baseline across Drake Passage. Verifies instant straight geodesic routing without processing delay.",
+      meta: "Obstacle: None (Open Deep Ocean) | Straight: 261 nm | Duration: 3 days"
+    }
+  };
+
+  if (presetSelect) {
+    presetSelect.addEventListener("change", (e) => {
+      const val = e.target.value;
+      const p = BENCHMARK_PRESETS[val];
+      if (p) {
+        document.getElementById("input-start-lat").value = p.start[0];
+        document.getElementById("input-start-lon").value = p.start[1];
+        document.getElementById("input-dest-lat").value = p.dest[0];
+        document.getElementById("input-dest-lon").value = p.dest[1];
+        if (p.days) {
+          const daysInput = document.getElementById("input-days");
+          if (daysInput) daysInput.value = p.days;
+        }
+
+        if (presetCard) {
+          presetDesc.textContent = p.desc;
+          presetMeta.textContent = p.meta;
+          presetCard.classList.remove("hidden");
+        }
+
+        draftMarkersGroup.clearLayers();
+        updateDraftLine();
+        const bounds = L.latLngBounds([p.start, p.dest]);
+        map.fitBounds(bounds, { padding: [60, 60], maxZoom: 7 });
+      }
+    });
+  }
 
   // Pick-on-map button
   document.getElementById("btn-pick-on-map").addEventListener("click", () => {
@@ -376,6 +641,7 @@ async function runRecalculate() {
   const destLat  = parseFloat(document.getElementById("input-dest-lat").value);
   const destLon  = parseFloat(document.getElementById("input-dest-lon").value);
   const dateStr  = document.getElementById("input-date").value + "T00:00:00Z";
+  const days     = parseInt(document.getElementById("input-days").value) || 5;
 
   // Validate
   if (isNaN(startLat) || isNaN(startLon) || isNaN(destLat) || isNaN(destLon)) {
@@ -404,7 +670,7 @@ async function runRecalculate() {
         start_coords: [startLat, startLon],
         dest_coords:  [destLat, destLon],
         date:         dateStr,
-        days:         7
+        days:         days
       })
     });
 
@@ -415,8 +681,10 @@ async function runRecalculate() {
 
     multiDayData = await res.json();
     draftMarkersGroup.clearLayers();
+    const totalDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : days;
+    updateTimelineControls(totalDays);
     renderDay(1);
-    updateHeaderStatus(`Route recalculated — ${new Date().toLocaleTimeString()}`, false);
+    updateHeaderStatus(`Route recalculated (${totalDays} travel days) — ${new Date().toLocaleTimeString()}`, false);
   } catch (err) {
     showError("Calculation failed: " + err.message);
     updateHeaderStatus("Route calculation failed", true);
@@ -433,7 +701,6 @@ let loadingStepTimer = null;
 
 function showLoading() {
   document.getElementById("loading-overlay").classList.remove("hidden");
-  // Reset step states
   [1,2,3,4].forEach(i => {
     const el = document.getElementById(`lstep-${i}`);
     el.className = "lstep";
@@ -450,14 +717,14 @@ function animateLoadingSteps() {
   const delays = [0, 2500, 5000, 8000];
   delays.forEach((delay, i) => {
     loadingStepTimer = setTimeout(() => {
-      // Complete previous step
       if (i > 0) {
         const prev = document.getElementById(`lstep-${i}`);
-        prev.classList.remove("active");
-        prev.classList.add("done");
-        prev.textContent = prev.textContent.replace("&#x2B21;", "✓").replace("⬡", "✓");
+        if (prev) {
+          prev.classList.remove("active");
+          prev.classList.add("done");
+          prev.textContent = prev.textContent.replace("&#x2B21;", "✓").replace("⬡", "✓");
+        }
       }
-      // Activate current
       const cur = document.getElementById(`lstep-${i + 1}`);
       if (cur) cur.classList.add("active");
     }, delay);
@@ -494,8 +761,9 @@ function togglePlayback() {
     if (multiDayData.length === 0) { isPlaying = false; return; }
     icon.textContent = "❚❚";
     playInterval = setInterval(() => {
+      const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || multiDayData.length) : 7;
       let next = currentDay + 1;
-      if (next > 7) next = 1;
+      if (next > maxDays) next = 1;
       renderDay(next);
     }, 1500);
   } else {
@@ -503,3 +771,4 @@ function togglePlayback() {
     clearInterval(playInterval);
   }
 }
+

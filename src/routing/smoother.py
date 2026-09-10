@@ -53,9 +53,11 @@ def prune_waypoints(waypoints, min_distance_nm=4.0):
     return pruned
 
 
-def smooth_route_polyline(waypoints, density_per_segment=6):
+def smooth_route_polyline(waypoints, density_per_segment=6, land_mask_fn=None):
     """
     Takes discrete A* waypoints and generates a smooth, curved nautical route polyline.
+    If land_mask_fn is supplied, verifies each spline segment and falls back to
+    safe linear interpolation if a curved segment clips land.
     """
     if len(waypoints) <= 2:
         return waypoints
@@ -78,7 +80,22 @@ def smooth_route_polyline(waypoints, density_per_segment=6):
     smoothed = [clean_pts[0]]
     for i in range(1, len(extended) - 2):
         p0, p1, p2, p3 = extended[i - 1], extended[i], extended[i + 1], extended[i + 2]
-        segment_pts = catmull_rom_spline(p1, p2, p3, p0 if i == 1 else p3, num_points=density_per_segment)
+        segment_pts = catmull_rom_spline(p0, p1, p2, p3, num_points=density_per_segment)
+
+        # Check if spline segment clipped land
+        clipped_land = False
+        if land_mask_fn is not None:
+            for pt in segment_pts:
+                if land_mask_fn(pt[0], pt[1]):
+                    clipped_land = True
+                    break
+
+        if clipped_land:
+            # Fallback to safe linear segment between p1 and p2
+            lats = np.linspace(p1[0], p2[0], density_per_segment)
+            lons = np.linspace(p1[1], p2[1], density_per_segment)
+            segment_pts = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
+
         smoothed.extend(segment_pts[1:])
 
     # Guarantee destination matches exactly

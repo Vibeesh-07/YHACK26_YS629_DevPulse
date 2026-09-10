@@ -74,7 +74,7 @@ def run_pipeline(start_coords, dest_coords, forecast_start_date=None, forecast_d
     print(f"💾 Contract B Generated       : src/contracts/route_day_state.json (Ready for A* routing)")
 
     print("\n" + "=" * 80)
-    print(" 📊 7-DAY FORECAST SUMMARY FOR CORRIDOR ICEBERGS")
+    print(f" 📊 {forecast_days}-DAY FORECAST SUMMARY FOR CORRIDOR ICEBERGS")
     print("=" * 80)
 
     for sim in step2_output["simulations"]:
@@ -97,14 +97,17 @@ def run_pipeline(start_coords, dest_coords, forecast_start_date=None, forecast_d
     step3_output = solve_multiday_routes(step1_output, step2_output)
 
     print("\n" + "=" * 80)
-    print(" 📊 7-DAY RECOMMENDED NAVIGATION ROUTES")
+    print(f" 📊 {forecast_days}-DAY RECOMMENDED NAVIGATION ROUTES & VESSEL PROGRESS")
     print("=" * 80)
-    print(f"{'Day':<6} | {'Route Distance':<16} | {'Closest Hazard':<16} | {'Confidence':<12} | {'A* Waypoints'}")
+    print(f"{'Day':<6} | {'Route Distance':<16} | {'Ship Progress':<16} | {'Avg Speed':<12} | {'A* Waypoints'}")
     print(f"{'-'*6}-+-{'-'*16}-+-{'-'*16}-+-{'-'*12}-+-{'-'*14}")
     for d_state in step3_output:
         kpis = d_state["kpis"]
         nav = d_state["navigation"]
-        print(f"Day {d_state['day']:<2} | {kpis['route_distance_nm']:>10.1f} nm     | {kpis['closest_hazard_nm']:>10.2f} nm     | {d_state['status']['route_confidence_pct']:>8}%     | {nav['smoothed_points_count']} pts")
+        ship = d_state.get("ship", {})
+        prog_str = f"{ship.get('progress_pct', 0.0)}% ({ship.get('distance_traveled_nm', 0.0)} nm)"
+        speed_str = f"{ship.get('average_speed_knots', 0.0)} kn"
+        print(f"Day {d_state['day']:<2} | {kpis['route_distance_nm']:>10.1f} nm     | {prog_str:>14} | {speed_str:>10} | {nav['smoothed_points_count']} pts")
 
     print("\n" + "=" * 80)
     print(" 🚀 PIPELINE COMPLETE: STEPS 1 -> 2 -> 3 FULLY INTEGRATED")

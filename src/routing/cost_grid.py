@@ -159,6 +159,10 @@ class CostGrid:
                 nr, nc = r + dr, c + dc
                 if 0 <= nr < self.nrows and 0 <= nc < self.ncols:
                     if not impassable_mask[nr, nc]:
+                        # Prevent diagonal corner-cutting through obstacles
+                        if dr != 0 and dc != 0:
+                            if impassable_mask[r + dr, c] or impassable_mask[r, c + dc]:
+                                continue
                         n_lat = self.lats[nr]
                         n_lon = self.lons[nc]
                         dist_nm = haversine_nm(cur_lat, cur_lon, n_lat, n_lon)

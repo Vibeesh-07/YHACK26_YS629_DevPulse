@@ -18,16 +18,78 @@ from src.physics.monte_carlo import haversine_nm
 BASE_COST = 1.0
 
 
-def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards):
+def check_direct_path_clear(cost_grid, start_coords, dest_coords, hazards, num_samples=60, safety_margin_nm=1.0):
     """
-    Finds the optimal collision-free waypoint path from start to destination
-    avoiding all impassable iceberg cores and minimizing hazard buffer exposure.
+    Fast Line-of-Sight (LOS) Obstacle Check.
+    Determines if the direct geodesic straight line between start and destination
+    is completely free of land obstacles, sea-ice, and iceberg hazard zones.
 
     Returns:
-      waypoints: list of [lat, lon] coordinates from start to destination.
-      metrics: dict with total distance, path cost, and nodes evaluated.
+      (is_clear, reason, closest_hazard_nm, direct_waypoints)
     """
-    # 1. Overlay dynamic hazards onto grid
+    lats = np.linspace(start_coords[0], dest_coords[0], num_samples)
+    lons = np.linspace(start_coords[1], dest_coords[1], num_samples)
+    direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
+
+    # 1. Check land collisions along direct path
+    if cost_grid.land_mask_fn is not None:
+        for p in direct_waypoints:
+            if cost_grid.land_mask_fn(p[0], p[1]):
+                return False, f"Land intersects direct path at ({p[0]}, {p[1]})", 0.0, []
+
+    # 2. Check cost grid impassable cells (impassable mask)
+    for p in direct_waypoints:
+        r, c = cost_grid.coords_to_node(p[0], p[1])
+        if cost_grid.impassable[r, c]:
+            return False, f"Grid obstacle intersects direct path at node ({r}, {c})", 0.0, []
+
+    # 3. Check if any iceberg projects onto the path
+    min_dist_to_hazard = 999.0
+    for h in hazards:
+        center = h.get("center", [h.get("lat"), h.get("lon")])
+        if center[0] is None or center[1] is None:
+            continue
+        r_buffer = float(h.get("buffer_radius_nm", 5.0))
+        # Distance from all sample points on the direct line to this hazard
+        dists = [haversine_nm(p[0], p[1], center[0], center[1]) for p in direct_waypoints]
+        min_d = min(dists)
+        if min_d < min_dist_to_hazard:
+            min_dist_to_hazard = min_d
+        # If the hazard's buffer zone intersects or passes too close to the direct line:
+        if min_d <= (r_buffer + safety_margin_nm):
+            return False, f"Iceberg {h.get('id', 'hazard')} projects onto path (dist {min_d:.2f} nm <= buffer {r_buffer:.2f} nm)", min_dist_to_hazard, []
+
+    return True, "Direct path is clear (no land, no icebergs project onto path)", min_dist_to_hazard, direct_waypoints
+
+
+def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards):
+    """
+    Finds the optimal collision-free waypoint path from start to destination.
+
+    Fast Path: If no icebergs project onto the path and no land blocks it,
+    immediately returns the straight geodesic path with zero graph-search overhead.
+    Otherwise: Executes risk-aware A* pathfinding.
+
+    Returns:
+      dict with waypoints, total_distance_nm, path_cost, and nodes_evaluated.
+    """
+    # ── Fast Path: Check if direct line is unobstructed ──────────────────────
+    is_clear, reason, closest_h_dist, direct_waypoints = check_direct_path_clear(
+        cost_grid, start_coords, dest_coords, hazards
+    )
+    if is_clear:
+        direct_dist = haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1])
+        return {
+            "success": True,
+            "is_direct": True,
+            "waypoints": direct_waypoints,
+            "total_distance_nm": round(direct_dist, 2),
+            "closest_hazard_nm": round(closest_h_dist, 2),
+            "path_cost": round(direct_dist, 2),
+            "nodes_evaluated": 0
+        }
+
+    # ── Standard A*: Overlay dynamic hazards onto grid ────────────────────────
     cost_matrix, impassable_mask = cost_grid.build_daily_cost_matrix(hazards)
 
     start_node = cost_grid.coords_to_node(start_coords[0], start_coords[1])

@@ -88,12 +88,8 @@ def _build_merged_geometry():
 
 def build_land_mask_fn():
     """
-    Returns callable  land_mask_fn(lat, lon) -> bool.
-    True  = land / ice = impassable.
-
-    Combines shapely polygon check (Natural Earth 50m) with a geographic
-    heuristic so that Antarctica, South Shetlands, and small islands are
-    always correctly identified even where polygon precision is insufficient.
+    Returns callable land_mask_fn(lat, lon) -> bool.
+    True = land / ice = impassable.
     """
     geom = _build_merged_geometry()
 
@@ -104,8 +100,11 @@ def build_land_mask_fn():
             prepared = prep(geom)
 
             def land_mask_fn(lat, lon):
-                # OR: land if shapely polygon OR heuristic says so
-                return prepared.contains(Point(lon, lat)) or _fallback_land_mask(lat, lon)
+                # 1. Antarctica polar interior
+                if lat < -72.0:
+                    return True
+                # 2. Authoritative Natural Earth 50m vector polygon
+                return prepared.contains(Point(lon, lat))
 
             return land_mask_fn
         except Exception as e:
@@ -118,18 +117,17 @@ def build_land_mask_fn():
 def build_land_mask_grid(lats, lons):
     """
     Precomputes a 2D boolean numpy array (nrows × ncols) where True = land.
-    Combines shapely polygon result with geographic heuristic (OR logic).
+    Uses Natural Earth 50m vector polygons (fast vectorized check) + polar cap.
     Returns: (land_grid, land_mask_fn)
     """
     nrows, ncols = len(lats), len(lons)
     land_grid = np.zeros((nrows, ncols), dtype=bool)
 
-    # Always build the heuristic grid first (fast, catches Antarctica etc.)
     LAT_2D, LON_2D = np.meshgrid(lats, lons, indexing="ij")
-    heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
-    land_grid = np.logical_or(land_grid, heuristic_grid)
+    # Polar ice sheet interior
+    land_grid[LAT_2D < -72.0] = True
 
-    # Overlay shapely polygons (more accurate for coastlines)
+    # Overlay shapely polygons (authoritative for all coastlines & islands)
     geom = _build_merged_geometry()
     if geom is not None:
         try:
@@ -139,7 +137,6 @@ def build_land_mask_grid(lats, lons):
             land_grid = np.logical_or(land_grid, shapely_grid)
             log.info(f"Combined land grid: {land_grid.sum()}/{land_grid.size} cells blocked.")
         except AttributeError:
-            # Older shapely — row-by-row
             from shapely.prepared import prep
             from shapely.geometry import Point
             prepared = prep(geom)
@@ -149,35 +146,33 @@ def build_land_mask_grid(lats, lons):
                         land_grid[r, c] = True
             log.info(f"Land grid (iterative): {land_grid.sum()}/{land_grid.size} cells blocked.")
         except Exception as e:
-            log.warning(f"Shapely grid scan error: {e}. Using heuristic-only grid.")
+            log.warning(f"Shapely grid scan error: {e}. Using heuristic fallback.")
+            heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
+            land_grid = np.logical_or(land_grid, heuristic_grid)
+    else:
+        heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
+        land_grid = np.logical_or(land_grid, heuristic_grid)
 
     land_fn = build_land_mask_fn()
     return land_grid, land_fn
 
 
-# ─── Hard-coded Fallback ──────────────────────────────────────────────────────
-
 def _fallback_land_mask(lat, lon):
     """
     Geographic heuristic for the Weddell / Scotia corridor.
-    Covers the main features at routing resolution.
+    Covers the core features with accurate geographic bounds.
     """
-    # Antarctic continent / ice sheet
-    if lat < -73.0:
+    # 1. Antarctic continent interior & deep shelf
+    if lat < -72.0:
         return True
-    # Antarctic Peninsula
-    if lat < -62.0 and -68.0 <= lon <= -55.0:
+    # 2. Falkland Islands (East & West Falkland)
+    if -52.4 <= lat <= -51.2 and -61.2 <= lon <= -57.6:
         return True
-    # South Georgia Island
-    if -55.5 <= lat <= -53.5 and -38.5 <= lon <= -35.5:
-        return True
-    # Falkland / Malvinas
-    if -53.0 <= lat <= -51.0 and -61.5 <= lon <= -57.0:
-        return True
-    # South Shetland Islands
-    if -63.0 <= lat <= -61.5 and -62.0 <= lon <= -54.0:
+    # 3. South Georgia Island core (Shapely handles detailed coastline)
+    if -54.75 <= lat <= -54.10 and -37.8 <= lon <= -35.9:
         return True
     return False
+
 
 
 # ─── CLI test ────────────────────────────────────────────────────────────────

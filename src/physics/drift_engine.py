@@ -74,21 +74,26 @@ class DriftSimulator:
         clean_len = [float(x) for x in res["length"] if not np.isnan(x)]
         clean_wid = [float(x) for x in res["width"] if not np.isnan(x)]
 
+        n_days = min(len(clean_lat), len(clean_lon))
+        default_vol = clean_vol[-1] if clean_vol else 0.0
+        default_len = clean_len[-1] if clean_len else float(L)
+        default_wid = clean_wid[-1] if clean_wid else float(W)
+
         return {
             "id": berg_info["id"],
-            "days_simulated": len(clean_lat),
+            "days_simulated": n_days,
             "trajectory": [
                 {
                     "day": d + 1,
                     "date": (pd.Timestamp(start_datetime) + pd.Timedelta(days=d)).strftime("%Y-%m-%d"),
                     "lat": round(clean_lat[d], 4),
                     "lon": round(clean_lon[d], 4),
-                    "length_m": round(clean_len[d], 1),
-                    "width_m": round(clean_wid[d], 1),
-                    "volume_m3": clean_vol[d],
-                    "melt_loss_m3": float(res["melt"][d]) if d < len(res["melt"]) else 0.0
+                    "length_m": round(clean_len[d] if d < len(clean_len) else default_len, 1),
+                    "width_m": round(clean_wid[d] if d < len(clean_wid) else default_wid, 1),
+                    "volume_m3": clean_vol[d] if d < len(clean_vol) else default_vol,
+                    "melt_loss_m3": float(res["melt"][d]) if ("melt" in res and d < len(res["melt"])) else 0.0
                 }
-                for d in range(len(clean_lat))
+                for d in range(n_days)
             ],
             "calved_children_count": len(res.get("children", []))
         }
@@ -160,12 +165,13 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
         }
         daily_hazard_states.append(day_state)
 
-    # Save representative Day 3 state to the standard contract file
-    if output_contract and len(daily_hazard_states) >= 3:
+    # Save representative state (Day 3 or last available day) to the standard contract file
+    if output_contract and len(daily_hazard_states) > 0:
+        rep_idx = min(2, len(daily_hazard_states) - 1)
         os.makedirs(os.path.dirname(output_contract), exist_ok=True)
         with open(output_contract, "w") as f:
-            json.dump(daily_hazard_states[2], f, indent=2)  # Day 3
-        print(f"\n  [Step 2] Representative Day 3 state saved to {output_contract}")
+            json.dump(daily_hazard_states[rep_idx], f, indent=2)
+        print(f"\n  [Step 2] Representative Day {rep_idx + 1} state saved to {output_contract}")
 
     return {
         "forecast_days": forecast_days,
