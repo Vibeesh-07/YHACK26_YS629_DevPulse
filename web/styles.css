@@ -238,6 +238,13 @@ body {
   box-shadow: 0 0 6px var(--accent-green);
 }
 
+.symbol-wake {
+  width: 20px;
+  height: 0;
+  border-top: 2.5px dashed var(--accent-ice);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.4);
+}
+
 /* Coordinates Drawer */
 .coords-drawer {
   position: absolute;

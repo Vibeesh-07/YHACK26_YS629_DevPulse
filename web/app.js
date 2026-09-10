@@ -118,14 +118,15 @@ function makeVesselIcon(ship) {
 
 function makeVesselPopup(dayData, ship) {
   return `
-    <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px">
+    <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px">
       <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
       <div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
-        <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)
+        <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
+        <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
       </div>
       <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
       <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
-      <span style="color:#555">Traveled:</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
+      <span style="color:#555">Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
       <span style="color:#555">Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong><br>
       <span style="color:#555">Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong><br>
       <span style="color:#888;font-size:11px">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</span>
@@ -300,39 +301,63 @@ function renderMapLayers(dayData, ship) {
       { permanent: false, direction: "right" })
     .addTo(waypointsLayerGroup);
 
-  // Route glow + main line
-  if (nav.route_polyline && nav.route_polyline.length > 1) {
-    L.polyline(nav.route_polyline, {
-      color: "#10b981", weight: 10, opacity: 0.18
-    }).addTo(routeLayerGroup);
+  // ── 1. Historical Sailed Wake (Start -> Current Vessel Position) ──
+  const wakePoints = (nav.history_polyline && nav.history_polyline.length > 1)
+    ? nav.history_polyline
+    : (ship && ship.progress_pct > 0 && ship.coords ? [start, ship.coords] : null);
 
-    L.polyline(nav.route_polyline, {
-      color: "#10b981", weight: 3, opacity: 0.95,
-      lineCap: "round", lineJoin: "round"
-    }).addTo(routeLayerGroup);
-
-    // If ship has traveled forward, draw the wake trail in cyan dash
-    if (ship && ship.progress_pct > 0 && ship.coords) {
-      const wakePoints = [start];
-      for (const pt of nav.route_polyline) {
-        wakePoints.push(pt);
-        const dShip = haversineNmJs(pt[0], pt[1], ship.coords[0], ship.coords[1]);
-        if (dShip < 2.0) break;
-      }
-      wakePoints.push(ship.coords);
-      L.polyline(wakePoints, {
-        color: "#38bdf8", weight: 3.5, dashArray: "4,6", opacity: 0.85
-      }).addTo(wakeLayerGroup);
-    }
+  if (wakePoints && wakePoints.length > 1) {
+    L.polyline(wakePoints, {
+      color: "#38bdf8",
+      weight: 3.5,
+      dashArray: "5,7",
+      opacity: 0.85,
+      lineCap: "round"
+    })
+      .bindTooltip(`Sailed wake: ${ship.distance_traveled_nm || 0} nm completed`, {
+        permanent: false,
+        direction: "center"
+      })
+      .addTo(wakeLayerGroup);
   }
 
-  // Moving Ship Marker
+  // ── 2. Dynamic Forward Route (Current Vessel Position -> Destination) ──
+  const forwardPoints = (nav.forward_polyline && nav.forward_polyline.length > 1)
+    ? nav.forward_polyline
+    : (nav.route_polyline && nav.route_polyline.length > 1 ? nav.route_polyline : null);
+
+  if (forwardPoints && forwardPoints.length > 1) {
+    // Outer emerald glow
+    L.polyline(forwardPoints, {
+      color: "#10b981",
+      weight: 10,
+      opacity: 0.22,
+      lineCap: "round",
+      lineJoin: "round"
+    }).addTo(routeLayerGroup);
+
+    // Primary dynamic forward route line
+    L.polyline(forwardPoints, {
+      color: "#10b981",
+      weight: 3.5,
+      opacity: 0.95,
+      lineCap: "round",
+      lineJoin: "round"
+    })
+      .bindTooltip(`Dynamic route from current position (${ship.distance_remaining_nm || 0} nm remaining)`, {
+        permanent: false,
+        direction: "center"
+      })
+      .addTo(routeLayerGroup);
+  }
+
+  // Moving Ship Marker (positioned at current position P_d)
   if (ship && ship.coords) {
     L.marker(ship.coords, {
       icon: makeVesselIcon(ship),
       zIndexOffset: 1000
     })
-      .bindTooltip(`🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% - ${ship.average_speed_knots} kn)`,
+      .bindTooltip(`🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`,
         { permanent: false, direction: "top", offset: [0, -18] })
       .bindPopup(makeVesselPopup(dayData, ship))
       .addTo(shipLayerGroup);

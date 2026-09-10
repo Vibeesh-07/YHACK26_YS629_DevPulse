@@ -123,6 +123,50 @@ def interpolate_ship_position(route_polyline, day_num, total_days, total_distanc
     }
 
 
+def slice_polyline_by_distance(polyline, target_dist_nm):
+    """
+    Slices a polyline from index 0 up to target_dist_nm.
+    Returns:
+      (sliced_points, end_coords, heading_at_end)
+    """
+    if not polyline:
+        return [], [0.0, 0.0], 0.0
+
+    if len(polyline) == 1 or target_dist_nm <= 1e-4:
+        p0 = polyline[0]
+        heading = 0.0
+        if len(polyline) > 1:
+            heading = calculate_bearing(p0[0], p0[1], polyline[1][0], polyline[1][1])
+        return [[round(float(p0[0]), 4), round(float(p0[1]), 4)]], [round(float(p0[0]), 4), round(float(p0[1]), 4)], heading
+
+    accum = 0.0
+    pts = [[round(float(polyline[0][0]), 4), round(float(polyline[0][1]), 4)]]
+    heading = 0.0
+
+    for i in range(len(polyline) - 1):
+        p1 = polyline[i]
+        p2 = polyline[i + 1]
+        seg_dist = haversine_nm(p1[0], p1[1], p2[0], p2[1])
+
+        if accum + seg_dist >= target_dist_nm:
+            remain = target_dist_nm - accum
+            frac = remain / seg_dist if seg_dist > 1e-6 else 0.0
+            lat = p1[0] + frac * (p2[0] - p1[0])
+            lon = p1[1] + frac * (p2[1] - p1[1])
+            heading = calculate_bearing(p1[0], p1[1], p2[0], p2[1])
+            end_pt = [round(float(lat), 4), round(float(lon), 4)]
+            pts.append(end_pt)
+            return pts, end_pt, heading
+
+        accum += seg_dist
+        pts.append([round(float(p2[0]), 4), round(float(p2[1]), 4)])
+
+    end_pt = polyline[-1]
+    if len(polyline) >= 2:
+        heading = calculate_bearing(polyline[-2][0], polyline[-2][1], end_pt[0], end_pt[1])
+    return pts, [round(float(end_pt[0]), 4), round(float(end_pt[1]), 4)], heading
+
+
 def calculate_closest_hazard_nm(route_polyline, hazards):
     """
     Computes minimum clearance distance (nm) between ship route and any iceberg hazard.
@@ -144,178 +188,148 @@ def calculate_closest_hazard_nm(route_polyline, hazards):
 def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
     """
     Solves optimal collision-free routes for each forecast day (Days 1 through N).
+    Receding-Horizon Dynamic Routing:
+      On each day d, the route is dynamically planned from the vessel's CURRENT POSITION (P_d)
+      to the destination, avoiding day d's drifting icebergs and hazards.
+      The historical sailed track from Start up to P_d remains fixed as the sailed voyage history.
     """
-    start_coords = step1_state["start_coords"]
-    dest_coords = step1_state["dest_coords"]
+    start_coords = [round(float(step1_state["start_coords"][0]), 4), round(float(step1_state["start_coords"][1]), 4)]
+    dest_coords = [round(float(step1_state["dest_coords"][0]), 4), round(float(step1_state["dest_coords"][1]), 4)]
     bbox = step1_state["corridor_bbox"]
     forecast_days = step2_output.get("forecast_days", 7)
     daily_hazard_states = step2_output["daily_hazard_states"]
 
-    # ── Fast Pre-Check: Is the direct geodesic line unobstructed? ────────────
     from src.data.land_mask import build_land_mask_fn
     land_mask_fn = build_land_mask_fn()
 
-    num_samples = 60
-    sample_lats = np.linspace(start_coords[0], dest_coords[0], num_samples)
-    sample_lons = np.linspace(start_coords[1], dest_coords[1], num_samples)
-    direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(sample_lats, sample_lons)]
-    direct_dist_nm = round(haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1]), 1)
+    # Cost grid initialized lazily if obstacle avoidance is required
+    cost_grid = None
 
-    # Check 1: Does the direct path intersect land?
-    direct_hits_land = any(land_mask_fn(p[0], p[1]) for p in direct_waypoints)
-
-    # Check 2: Do any icebergs project onto the direct path on each day?
-    day_obstructed = []
-    day_closest_hazards = []
-    for day_idx in range(forecast_days):
-        hazards = daily_hazard_states[day_idx]["hazards"] if day_idx < len(daily_hazard_states) else []
-        obstructed = direct_hits_land
-        min_h_dist = 999.0
-        for h in hazards:
-            center = h.get("center", [h.get("lat"), h.get("lon")])
-            if center[0] is None or center[1] is None:
-                continue
-            r_buffer = float(h.get("buffer_radius_nm", 5.0))
-            dists = [haversine_nm(p[0], p[1], center[0], center[1]) for p in direct_waypoints]
-            min_d = min(dists) if dists else 999.0
-            if min_d < min_h_dist:
-                min_h_dist = min_d
-            if min_d <= (r_buffer + 1.0):
-                obstructed = True
-        day_obstructed.append(obstructed)
-        day_closest_hazards.append(min_h_dist)
+    def get_or_build_cost_grid():
+        nonlocal cost_grid
+        if cost_grid is not None:
+            return cost_grid
+        from src.data.land_mask import build_land_mask_grid
+        import numpy as _np_lm
+        _tmp_lats = _np_lm.arange(bbox["min_lat"], bbox["max_lat"] + res_deg, res_deg)
+        _tmp_lons = _np_lm.arange(bbox["min_lon"], bbox["max_lon"] + res_deg, res_deg)
+        print(f"  Building land mask for {len(_tmp_lats)}x{len(_tmp_lons)} grid…")
+        land_grid, _ = build_land_mask_grid(_tmp_lats, _tmp_lons)
+        sic_fn = None
+        try:
+            era5 = ima.ERA5Forcing(ima.CONFIG)
+            def sic_fn(lat, lon):
+                yi = ima.closest_node(lat, era5.lat)
+                xi = ima.closest_node(lon, era5.lon)
+                val = era5.sic[0, yi, xi]
+                return float(val) if not np.isnan(val) else 0.0
+        except Exception:
+            pass
+        cost_grid = CostGrid(bbox, res_deg=res_deg, land_mask_fn=land_mask_fn,
+                             sic_fn=sic_fn, land_grid=land_grid)
+        return cost_grid
 
     all_days_data = []
 
-    # ── Instant Fast-Path: If NO day has land or iceberg obstructions, bypass heavy grid! ─
-    if not any(day_obstructed):
-        print(f"\n[Step 3] ⚡ Direct path is completely unobstructed! (No land, 0 icebergs in path)")
-        print(f"         Bypassing heavy 2D grid generation & A* search. Instant direct route ({direct_dist_nm} nm).")
-        for day_idx in range(forecast_days):
-            day_num = day_idx + 1
-            hazards = daily_hazard_states[day_idx]["hazards"] if day_idx < len(daily_hazard_states) else []
-            closest_hazard_nm = round(day_closest_hazards[day_idx], 1)
-            confidence_pct = max(90, 99 - day_idx)
+    # Ship progression state across the voyage
+    current_pos = [start_coords[0], start_coords[1]]
+    history_polyline = [current_pos]
+    dist_traveled_so_far = 0.0
 
-            ship_info = interpolate_ship_position(direct_waypoints, day_num, forecast_days, direct_dist_nm)
+    print(f"\n[Step 3] Solving Dynamic Multi-Day Routes from Current Vessel Positions (Days 1 to {forecast_days})...")
 
-            print(f"  * Day {day_num}: Direct straight path | Distance: {direct_dist_nm} nm | Closest Hazard: {closest_hazard_nm} nm | Ship: {ship_info['progress_pct']}% at {ship_info['coords']} ({ship_info['average_speed_knots']} kn)")
-            day_payload = {
-                "day": day_num,
-                "total_days": forecast_days,
-                "status": {
-                    "hazards_nearby": len(hazards),
-                    "route_confidence_pct": confidence_pct,
-                    "is_direct_path": True
-                },
-                "kpis": {
-                    "route_distance_nm": direct_dist_nm,
-                    "closest_hazard_nm": closest_hazard_nm,
-                    "icebergs_tracked": len(hazards),
-                    "nodes_evaluated": 0,
-                    "average_speed_knots": ship_info["average_speed_knots"],
-                    "daily_distance_nm": ship_info["daily_distance_nm"],
-                    "distance_traveled_nm": ship_info["distance_traveled_nm"],
-                    "distance_remaining_nm": ship_info["distance_remaining_nm"],
-                    "progress_pct": ship_info["progress_pct"]
-                },
-                "navigation": {
-                    "start": {"name": "Start", "coords": start_coords},
-                    "destination": {"name": "Destination", "coords": dest_coords},
-                    "route_polyline": direct_waypoints,
-                    "raw_waypoints_count": len(direct_waypoints),
-                    "smoothed_points_count": len(direct_waypoints),
-                    "is_direct_path": True
-                },
-                "ship": ship_info,
-                "hazards": hazards
-            }
-            all_days_data.append(day_payload)
-
-        # Save multi-day contract
-        multi_day_path = "src/contracts/multi_day_route_state.json"
-        os.makedirs(os.path.dirname(multi_day_path), exist_ok=True)
-        with open(multi_day_path, "w") as f:
-            json.dump(all_days_data, f, indent=2)
-        print(f"\n💾 Full {forecast_days}-Day Route State saved to: {multi_day_path}")
-
-        active_contract_path = "src/contracts/route_day_state.json"
-        active_day = all_days_data[2] if len(all_days_data) >= 3 else all_days_data[0]
-        with open(active_contract_path, "w") as f:
-            json.dump(active_day, f, indent=2)
-        print(f"💾 Active Contract B updated: {active_contract_path} (Day {active_day['day']})")
-
-        return all_days_data
-
-    # ── Fallback: Construct 2D Navigation Cost Grid for obstructed corridors ──────────
-    print(f"\n[Step 3] Initializing 2D Navigation Cost Grid (res = {res_deg}°)...")
-
-    # ── Land Mask: Natural Earth polygons via shapely ─────────────────────────
-    from src.data.land_mask import build_land_mask_grid
-    import numpy as _np_lm
-
-    _tmp_lats = _np_lm.arange(bbox["min_lat"], bbox["max_lat"] + res_deg, res_deg)
-    _tmp_lons = _np_lm.arange(bbox["min_lon"], bbox["max_lon"] + res_deg, res_deg)
-    print(f"  Building land mask for {len(_tmp_lats)}x{len(_tmp_lons)} grid…")
-    land_grid, land_mask_fn = build_land_mask_grid(_tmp_lats, _tmp_lons)
-    print(f"  Land mask: {land_grid.sum()} / {land_grid.size} cells blocked as land.")
-
-    # ── Sea-ice mask from ERA5 (optional) ────────────────────────────────────
-    sic_fn = None
-    try:
-        era5 = ima.ERA5Forcing(ima.CONFIG)
-        def sic_fn(lat, lon):
-            yi = ima.closest_node(lat, era5.lat)
-            xi = ima.closest_node(lon, era5.lon)
-            val = era5.sic[0, yi, xi]
-            return float(val) if not np.isnan(val) else 0.0
-    except Exception:
-        pass
-
-    cost_grid = CostGrid(bbox, res_deg=res_deg, land_mask_fn=land_mask_fn,
-                         sic_fn=sic_fn, land_grid=land_grid)
-    print(f"  Grid size: {cost_grid.nrows} lat x {cost_grid.ncols} lon ({cost_grid.nrows * cost_grid.ncols} cells)")
-
-    print(f"\n[Step 3] Solving Risk-Aware A* routes for Days 1 through {forecast_days}...")
     for day_idx in range(forecast_days):
         day_num = day_idx + 1
         hazards = daily_hazard_states[day_idx]["hazards"] if day_idx < len(daily_hazard_states) else []
 
-        # A* Pathfinding (Fast-paths to direct geodesic line if path is unobstructed)
-        astar_res = find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards)
-        is_direct = astar_res.get("is_direct", False)
+        rem_straight_nm = haversine_nm(current_pos[0], current_pos[1], dest_coords[0], dest_coords[1])
 
-        if is_direct:
-            # Direct straight path: use clean geodesic points without warping
-            smoothed_polyline = astar_res["waypoints"]
-            route_dist_nm = round(float(astar_res["total_distance_nm"]), 1)
-            closest_hazard_nm = float(astar_res.get("closest_hazard_nm", 999.0))
-            confidence_pct = max(90, 99 - day_idx)
-            ship_info = interpolate_ship_position(smoothed_polyline, day_num, forecast_days, route_dist_nm)
-            print(f"  * Day {day_num}: Direct straight path (unobstructed) | Distance: {route_dist_nm} nm | Closest Hazard: {closest_hazard_nm:.1f} nm | Ship: {ship_info['progress_pct']}% at {ship_info['coords']} ({ship_info['average_speed_knots']} kn) | Nodes: 0 (Fast LOS)")
+        # If vessel has arrived at destination or final arrival day
+        if rem_straight_nm < 0.5 or (day_num == forecast_days and day_num > 1 and rem_straight_nm < 3.0):
+            forward_polyline = [current_pos, dest_coords] if current_pos != dest_coords else [dest_coords]
+            forward_dist_nm = round(rem_straight_nm, 1)
+            is_direct = True
+            nodes_eval = 0
+            closest_h = calculate_closest_hazard_nm(forward_polyline, hazards)
+            heading = 0.0
+            if len(history_polyline) >= 2:
+                heading = calculate_bearing(history_polyline[-2][0], history_polyline[-2][1], current_pos[0], current_pos[1])
         else:
-            # Spline Smoothing with Land Avoidance Validation
-            smoothed_polyline = smooth_route_polyline(astar_res["waypoints"], land_mask_fn=cost_grid.land_mask_fn)
+            # 1. Fast Line-of-Sight Check from CURRENT POSITION to destination
+            num_samples = max(20, min(80, int(rem_straight_nm / 3.0)))
+            sample_lats = np.linspace(current_pos[0], dest_coords[0], num_samples)
+            sample_lons = np.linspace(current_pos[1], dest_coords[1], num_samples)
+            direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(sample_lats, sample_lons)]
 
-            # Calculate actual smoothed route distance
-            route_dist_nm = 0.0
-            for i in range(len(smoothed_polyline) - 1):
-                p1, p2 = smoothed_polyline[i], smoothed_polyline[i + 1]
-                route_dist_nm += haversine_nm(p1[0], p1[1], p2[0], p2[1])
-            route_dist_nm = round(route_dist_nm, 1)
+            direct_hits_land = any(land_mask_fn(p[0], p[1]) for p in direct_waypoints)
+            obstructed = direct_hits_land
+            min_h_dist = 999.0
+            for h in hazards:
+                center = h.get("center", [h.get("lat"), h.get("lon")])
+                if center[0] is None or center[1] is None:
+                    continue
+                r_buffer = float(h.get("buffer_radius_nm", 5.0))
+                dists = [haversine_nm(p[0], p[1], center[0], center[1]) for p in direct_waypoints]
+                min_d = min(dists) if dists else 999.0
+                if min_d < min_h_dist:
+                    min_h_dist = min_d
+                if min_d <= (r_buffer + 1.0):
+                    obstructed = True
 
-            # Calculate closest hazard clearance
-            closest_hazard_nm = calculate_closest_hazard_nm(smoothed_polyline, hazards)
+            if not obstructed:
+                # Fast path directly from current_pos to destination
+                forward_polyline = direct_waypoints
+                forward_dist_nm = round(rem_straight_nm, 1)
+                is_direct = True
+                nodes_eval = 0
+                closest_h = round(min_h_dist, 1)
+                heading = calculate_bearing(direct_waypoints[0][0], direct_waypoints[0][1],
+                                            direct_waypoints[1][0], direct_waypoints[1][1]) if len(direct_waypoints) > 1 else 0.0
+            else:
+                # Standard 2D Risk-Aware A* pathfinding from CURRENT POSITION to destination
+                cgrid = get_or_build_cost_grid()
+                astar_res = find_risk_aware_route(cgrid, current_pos, dest_coords, hazards)
+                smoothed_polyline = smooth_route_polyline(astar_res["waypoints"], land_mask_fn=land_mask_fn)
 
-            # Dynamic Route Confidence (decreases with forecast horizon and hazard proximity)
-            base_conf = max(65, 95 - day_idx * 2)
-            if closest_hazard_nm < 3.0:
-                base_conf -= 10
-            elif closest_hazard_nm < 5.0:
-                base_conf -= 4
-            confidence_pct = max(50, min(99, base_conf))
-            ship_info = interpolate_ship_position(smoothed_polyline, day_num, forecast_days, route_dist_nm)
-            print(f"  * Day {day_num}: Route {route_dist_nm} nm | Closest Hazard: {closest_hazard_nm} nm | Confidence: {confidence_pct}% | Ship: {ship_info['progress_pct']}% at {ship_info['coords']} ({ship_info['average_speed_knots']} kn) | Nodes: {astar_res['nodes_evaluated']}")
+                fwd_d = 0.0
+                for i in range(len(smoothed_polyline) - 1):
+                    fwd_d += haversine_nm(smoothed_polyline[i][0], smoothed_polyline[i][1],
+                                          smoothed_polyline[i + 1][0], smoothed_polyline[i + 1][1])
+                forward_polyline = smoothed_polyline
+                forward_dist_nm = round(fwd_d, 1)
+                is_direct = astar_res.get("is_direct", False)
+                nodes_eval = astar_res.get("nodes_evaluated", 0)
+                closest_h = calculate_closest_hazard_nm(forward_polyline, hazards)
+                heading = calculate_bearing(forward_polyline[0][0], forward_polyline[0][1],
+                                            forward_polyline[1][0], forward_polyline[1][1]) if len(forward_polyline) > 1 else 0.0
+
+        # Full combined route for Day d: sailed history + dynamic forward route
+        full_route = history_polyline[:-1] + forward_polyline
+
+        total_voyage_dist_nm = round(dist_traveled_so_far + forward_dist_nm, 1)
+        total_hours = max(1.0, float(forecast_days) * 24.0)
+        avg_speed_knots = round(total_voyage_dist_nm / total_hours, 1)
+        daily_run_nm = round(total_voyage_dist_nm / max(1, forecast_days), 1)
+        progress_pct = round(min(100.0, (dist_traveled_so_far / max(1.0, total_voyage_dist_nm)) * 100.0), 1)
+
+        confidence_pct = max(65, 99 - day_idx * 2)
+        if closest_h < 3.0:
+            confidence_pct -= 10
+        elif closest_h < 5.0:
+            confidence_pct -= 4
+        confidence_pct = max(50, min(99, confidence_pct))
+
+        ship_info = {
+            "coords": [round(float(current_pos[0]), 4), round(float(current_pos[1]), 4)],
+            "heading_deg": heading,
+            "distance_traveled_nm": round(dist_traveled_so_far, 1),
+            "distance_remaining_nm": round(forward_dist_nm, 1),
+            "progress_pct": progress_pct,
+            "average_speed_knots": avg_speed_knots,
+            "daily_distance_nm": daily_run_nm
+        }
+
+        print(f"  * Day {day_num}: Ship at {ship_info['coords']} ({ship_info['progress_pct']}%) | Dynamic route from current pos: {forward_dist_nm} nm ahead (Traveled: {ship_info['distance_traveled_nm']} nm) | Speed: {avg_speed_knots} kn | Clearance: {closest_h} nm | Nodes: {nodes_eval}")
 
         day_payload = {
             "day": day_num,
@@ -326,28 +340,41 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                 "is_direct_path": is_direct
             },
             "kpis": {
-                "route_distance_nm": route_dist_nm,
-                "closest_hazard_nm": closest_hazard_nm,
+                "route_distance_nm": total_voyage_dist_nm,
+                "closest_hazard_nm": closest_h,
                 "icebergs_tracked": len(hazards),
-                "nodes_evaluated": astar_res["nodes_evaluated"],
-                "average_speed_knots": ship_info["average_speed_knots"],
-                "daily_distance_nm": ship_info["daily_distance_nm"],
-                "distance_traveled_nm": ship_info["distance_traveled_nm"],
-                "distance_remaining_nm": ship_info["distance_remaining_nm"],
-                "progress_pct": ship_info["progress_pct"]
+                "nodes_evaluated": nodes_eval,
+                "average_speed_knots": avg_speed_knots,
+                "daily_distance_nm": daily_run_nm,
+                "distance_traveled_nm": round(dist_traveled_so_far, 1),
+                "distance_remaining_nm": round(forward_dist_nm, 1),
+                "progress_pct": progress_pct
             },
             "navigation": {
                 "start": {"name": "Start", "coords": start_coords},
+                "current_position": {"name": "Vessel Position", "coords": current_pos},
                 "destination": {"name": "Destination", "coords": dest_coords},
-                "route_polyline": smoothed_polyline,
-                "raw_waypoints_count": len(astar_res["waypoints"]),
-                "smoothed_points_count": len(smoothed_polyline),
+                "history_polyline": history_polyline,
+                "forward_polyline": forward_polyline,
+                "route_polyline": full_route,
+                "raw_waypoints_count": len(forward_polyline),
+                "smoothed_points_count": len(full_route),
                 "is_direct_path": is_direct
             },
             "ship": ship_info,
             "hazards": hazards
         }
         all_days_data.append(day_payload)
+
+        # ── Advance the vessel for the next day (Day d+1) along the planned dynamic route ──
+        if day_num < forecast_days:
+            remaining_transitions = forecast_days - day_num
+            sail_step_nm = forward_dist_nm / float(remaining_transitions)
+            sliced_pts, next_pos, seg_heading = slice_polyline_by_distance(forward_polyline, sail_step_nm)
+
+            dist_traveled_so_far += sail_step_nm
+            history_polyline = history_polyline[:-1] + sliced_pts
+            current_pos = next_pos
 
     # Save multi-day contract
     multi_day_path = "src/contracts/multi_day_route_state.json"
@@ -356,7 +383,6 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
         json.dump(all_days_data, f, indent=2)
     print(f"\n💾 Full {forecast_days}-Day Route State saved to: {multi_day_path}")
 
-    # Update active daily contract with Day 3 (standard reference) or Day 1
     active_contract_path = "src/contracts/route_day_state.json"
     active_day = all_days_data[2] if len(all_days_data) >= 3 else all_days_data[0]
     with open(active_contract_path, "w") as f:
