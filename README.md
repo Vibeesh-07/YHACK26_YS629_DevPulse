@@ -207,7 +207,7 @@ To develop this platform concurrently without blocking, the system is split acro
 
 | Milestone | Person 1 (Data & AOI) | Person 2 (Physics & Drift) | Person 3 (Routing & UI) |
 |---|---|---|---|
-| **Phase 1: Minute 1** *(No Blocking)* | Build corridor bounding box; generate mock `initial_state.json`. | Load mock `initial_state.json`; extract equations from `iceberg_model_EWE20.py`. | Load mock `route_day_state.json`; scaffold UI layout matching the reference mockup. |
+| **Phase 1: Minute 1** *(No Blocking)* | Build corridor bounding box; generate mock `initial_state.json`. | Load mock `initial_state.json`; extract equations from `iceberg_model_adapted.py`. | Load mock `route_day_state.json`; scaffold UI layout matching the reference mockup. |
 | **Phase 2: Core Logic** | Implement BYU/NIC parser & ERA5/SIC fallback generator. | Vectorize drift step with wind, ocean drag, and pack-ice damping. | Implement cost grid, A* router, and cubic spline path smoother. |
 | **Phase 3: Ensemble & Polish** | Finalize mass estimation; test AOI filtering on historical data. | Implement Monte Carlo 50-run loop and 95% buffer radius expansion. | Wire up Day 1–7 scrubber slider, ▶ play animation loop, and dynamic KPI cards. |
 | **Phase 4: Full Integration** | Stream live environmental states to Person 2. | Run drift on real data; output 7-day forecast coordinates to Person 3. | Test end-to-end: changing Start/End coordinates dynamically recalculates routes. |
