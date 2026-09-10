@@ -59,25 +59,30 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
 
     print(f"\n[Step 3] Initializing 2D Navigation Cost Grid (res = {res_deg}°)...")
 
-    # Load environmental forcing for land & sea-ice masks
+    # ── Land Mask: Natural Earth 110m polygons via shapely ───────────────────
+    from src.data.land_mask import build_land_mask_grid
+    import numpy as _np_lm
+
+    _tmp_lats = _np_lm.arange(bbox["min_lat"], bbox["max_lat"] + res_deg, res_deg)
+    _tmp_lons = _np_lm.arange(bbox["min_lon"], bbox["max_lon"] + res_deg, res_deg)
+    print(f"  Building land mask for {len(_tmp_lats)}x{len(_tmp_lons)} grid…")
+    land_grid, land_mask_fn = build_land_mask_grid(_tmp_lats, _tmp_lons)
+    print(f"  Land mask: {land_grid.sum()} / {land_grid.size} cells blocked as land.")
+
+    # ── Sea-ice mask from ERA5 (optional) ────────────────────────────────────
+    sic_fn = None
     try:
         era5 = ima.ERA5Forcing(ima.CONFIG)
-        def land_mask_fn(lat, lon):
-            yi = ima.closest_node(lat, era5.lat)
-            xi = ima.closest_node(lon, era5.lon)
-            return bool(era5.land_mask[yi, xi])
-
         def sic_fn(lat, lon):
             yi = ima.closest_node(lat, era5.lat)
             xi = ima.closest_node(lon, era5.lon)
-            # Latest available SIC slice
             val = era5.sic[0, yi, xi]
             return float(val) if not np.isnan(val) else 0.0
     except Exception:
-        land_mask_fn = None
-        sic_fn = None
+        pass
 
-    cost_grid = CostGrid(bbox, res_deg=res_deg, land_mask_fn=land_mask_fn, sic_fn=sic_fn)
+    cost_grid = CostGrid(bbox, res_deg=res_deg, land_mask_fn=land_mask_fn,
+                         sic_fn=sic_fn, land_grid=land_grid)
     print(f"  Grid size: {cost_grid.nrows} lat x {cost_grid.ncols} lon ({cost_grid.nrows * cost_grid.ncols} cells)")
 
     all_days_data = []

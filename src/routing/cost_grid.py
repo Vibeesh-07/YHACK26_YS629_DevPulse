@@ -34,7 +34,18 @@ class CostGrid:
     2D Discrete Navigation Cost Mesh for Antarctic polar ship routing.
     """
 
-    def __init__(self, bbox, res_deg=0.06, land_mask_fn=None, sic_fn=None):
+    def __init__(self, bbox, res_deg=0.06, land_mask_fn=None, sic_fn=None,
+                 land_grid=None):
+        """
+        Args:
+            bbox: dict with min_lat, max_lat, min_lon, max_lon
+            res_deg: grid resolution in degrees
+            land_mask_fn: callable(lat, lon) -> bool (used if land_grid is None)
+            sic_fn: callable(lat, lon) -> float sea-ice concentration [0,1]
+            land_grid: precomputed 2D bool numpy array (nrows x ncols).
+                       When provided, per-cell land_mask_fn calls are skipped
+                       — much faster for large grids.
+        """
         self.min_lat = bbox["min_lat"]
         self.max_lat = bbox["max_lat"]
         self.min_lon = bbox["min_lon"]
@@ -53,10 +64,27 @@ class CostGrid:
         self.base_costs = np.full((self.nrows, self.ncols), BASE_COST, dtype=np.float32)
         self.impassable = np.zeros((self.nrows, self.ncols), dtype=bool)
 
+        # ── Apply precomputed land grid (fast path) ──────────────────────────
+        if land_grid is not None:
+            # Resize if dimensions differ slightly due to bbox rounding
+            lg = land_grid
+            if lg.shape != (self.nrows, self.ncols):
+                # Trim or pad to match (safe fallback)
+                r_min = min(lg.shape[0], self.nrows)
+                c_min = min(lg.shape[1], self.ncols)
+                self.impassable[:r_min, :c_min] = lg[:r_min, :c_min]
+            else:
+                self.impassable[:] = lg
+            self.base_costs[self.impassable] = INFINITY
+
         for r, lat in enumerate(self.lats):
             for c, lon in enumerate(self.lons):
-                # Check land
-                if self.land_mask_fn and self.land_mask_fn(lat, lon):
+                # Skip cells already marked impassable by the land grid
+                if self.impassable[r, c]:
+                    continue
+
+                # Per-cell land check (fallback when no precomputed grid)
+                if land_grid is None and self.land_mask_fn and self.land_mask_fn(lat, lon):
                     self.impassable[r, c] = True
                     self.base_costs[r, c] = INFINITY
                     continue
