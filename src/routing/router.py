@@ -199,8 +199,16 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
     forecast_days = step2_output.get("forecast_days", 7)
     daily_hazard_states = step2_output["daily_hazard_states"]
 
-    from src.data.land_mask import build_land_mask_fn
+    from src.data.land_mask import build_land_mask_fn, find_nearest_water_coord
     land_mask_fn = build_land_mask_fn()
+
+    # Ensure departure and arrival are in open water (auto-snap if user input/clicked on land)
+    if land_mask_fn(start_coords[0], start_coords[1]):
+        start_coords = find_nearest_water_coord(start_coords, land_mask_fn)
+        print(f"  [Notice] Departure was on land; snapped to nearest navigable water: {start_coords}")
+    if land_mask_fn(dest_coords[0], dest_coords[1]):
+        dest_coords = find_nearest_water_coord(dest_coords, land_mask_fn)
+        print(f"  [Notice] Destination was on land; snapped to nearest navigable water: {dest_coords}")
 
     # Cost grid initialized lazily if obstacle avoidance is required
     cost_grid = None
@@ -264,13 +272,26 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
             if len(history_polyline) >= 2:
                 heading = calculate_bearing(history_polyline[-2][0], history_polyline[-2][1], current_pos[0], current_pos[1])
         else:
-            # 1. Fast Line-of-Sight Check from CURRENT POSITION to destination
+            # 1. Continuous geometry Line-of-Sight check against land
+            direct_hits_land = False
+            try:
+                from src.data.land_mask import _build_merged_geometry
+                from shapely.geometry import LineString
+                geom = _build_merged_geometry()
+                if geom is not None:
+                    line = LineString([(current_pos[1], current_pos[0]), (dest_coords[1], dest_coords[0])])
+                    direct_hits_land = line.intersects(geom)
+            except Exception:
+                direct_hits_land = False
+
             num_samples = max(20, min(80, int(rem_straight_nm / 3.0)))
             sample_lats = np.linspace(current_pos[0], dest_coords[0], num_samples)
             sample_lons = np.linspace(current_pos[1], dest_coords[1], num_samples)
             direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(sample_lats, sample_lons)]
 
-            direct_hits_land = any(land_mask_fn(p[0], p[1]) for p in direct_waypoints)
+            if not direct_hits_land:
+                direct_hits_land = any(land_mask_fn(p[0], p[1]) for p in direct_waypoints)
+
             obstructed = direct_hits_land
             min_h_dist = 999.0
             for h in hazards:
@@ -413,8 +434,12 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                         escape_rad = np.radians(escape_bearing_deg)
                         dlat = (push_nm / 60.0) * np.cos(escape_rad)
                         dlon = (push_nm / 60.0) * np.sin(escape_rad) / np.cos(np.radians(center[0]))
-                        next_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
-                        print(f"    [Safety] Day {day_num}->{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} (drifted hazard)")
+                        test_next_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
+                        if not land_mask_fn(test_next_pos[0], test_next_pos[1]):
+                            next_pos = test_next_pos
+                        else:
+                            next_pos = find_nearest_water_coord(test_next_pos, land_mask_fn)
+                        print(f"    [Safety] Day {day_num}→{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} to water: {next_pos}")
                         # Update the last sliced point to reflect the corrected position
                         if sliced_pts:
                             sliced_pts[-1] = next_pos

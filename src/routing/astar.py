@@ -31,7 +31,19 @@ def check_direct_path_clear(cost_grid, start_coords, dest_coords, hazards, num_s
     lons = np.linspace(start_coords[1], dest_coords[1], num_samples)
     direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
 
-    # 1. Check land collisions along direct path
+    # 1. Continuous geometry line intersection check
+    try:
+        from src.data.land_mask import _build_merged_geometry
+        from shapely.geometry import LineString
+        geom = _build_merged_geometry()
+        if geom is not None:
+            line = LineString([(start_coords[1], start_coords[0]), (dest_coords[1], dest_coords[0])])
+            if line.intersects(geom):
+                return False, "Direct path intersects coastline/island geometry", 0.0, []
+    except Exception:
+        pass
+
+    # 1b. Check land collisions along direct path sample points
     if cost_grid.land_mask_fn is not None:
         for p in direct_waypoints:
             if cost_grid.land_mask_fn(p[0], p[1]):
@@ -73,6 +85,14 @@ def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards):
     Returns:
       dict with waypoints, total_distance_nm, path_cost, and nodes_evaluated.
     """
+    # Ensure start and dest coordinates are in open water
+    if cost_grid.land_mask_fn:
+        from src.data.land_mask import find_nearest_water_coord
+        if cost_grid.land_mask_fn(start_coords[0], start_coords[1]):
+            start_coords = find_nearest_water_coord(start_coords, cost_grid.land_mask_fn)
+        if cost_grid.land_mask_fn(dest_coords[0], dest_coords[1]):
+            dest_coords = find_nearest_water_coord(dest_coords, cost_grid.land_mask_fn)
+
     # ── Fast Path: Check if direct line is unobstructed ──────────────────────
     is_clear, reason, closest_h_dist, direct_waypoints = check_direct_path_clear(
         cost_grid, start_coords, dest_coords, hazards

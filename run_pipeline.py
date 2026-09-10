@@ -127,8 +127,8 @@ def run_pipeline(start_coords, dest_coords, forecast_start_date=None, forecast_d
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Step 1 -> Step 2 Antarctic Iceberg Drift Pipeline")
-    parser.add_argument("--start-lat", type=float, default=-63.5, help="Ship start latitude (default: -63.5)")
-    parser.add_argument("--start-lon", type=float, default=-58.2, help="Ship start longitude (default: -58.2)")
+    parser.add_argument("--start-lat", type=float, default=-63.3, help="Ship start latitude (default: -63.3)")
+    parser.add_argument("--start-lon", type=float, default=-58.3, help="Ship start longitude (default: -58.3)")
     parser.add_argument("--dest-lat", type=float, default=-60.8, help="Ship dest latitude (default: -60.8)")
     parser.add_argument("--dest-lon", type=float, default=-52.4, help="Ship dest longitude (default: -52.4)")
     parser.add_argument("--date", type=str, default="2026-09-10T00:00:00Z", help="Forecast start date (ISO string)")
