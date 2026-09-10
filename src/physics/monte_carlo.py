@@ -174,6 +174,8 @@ def run_monte_carlo_ensemble(berg_info, start_datetime, era5, ocean_clim, land_m
     }
 
 
+MAX_BUFFER_EXTRA_NM = 15.0  # Max nm added on top of iceberg physical radius for hazard ring cap
+
 def compute_corridor_monte_carlo_hazards(icebergs, start_datetime, era5, ocean_clim, land_mask_check,
                                          n_runs=50, ndays=7, safety_buffer_nm=3.0):
     """
@@ -203,12 +205,20 @@ def compute_corridor_monte_carlo_hazards(icebergs, start_datetime, era5, ocean_c
         for res in mc_results:
             if d < len(res["daily_stats"]):
                 st = res["daily_stats"][d]
+                r_iceberg = st["iceberg_radius_nm"]
+                # Cap the hazard buffer: never exceeds iceberg_radius + MAX_BUFFER_EXTRA_NM.
+                # This prevents the ring from growing arbitrarily large on later forecast days
+                # while still giving a physics-informed standoff that scales with iceberg size.
+                capped_buffer_nm = round(
+                    min(st["total_hazard_radius_nm"], r_iceberg + MAX_BUFFER_EXTRA_NM), 2
+                )
                 hazards_by_day[day_num].append({
                     "id": res["id"],
                     "center": st["centroid"],
-                    "iceberg_radius_nm": st["iceberg_radius_nm"],
+                    "iceberg_radius_nm": r_iceberg,
                     "mc_95_dispersion_nm": st["mc_95_dispersion_nm"],
-                    "buffer_radius_nm": st["total_hazard_radius_nm"]
+                    "buffer_radius_nm": capped_buffer_nm,
+                    "total_hazard_radius_nm_uncapped": st["total_hazard_radius_nm"]  # kept for diagnostics
                 })
 
     return mc_results, hazards_by_day
