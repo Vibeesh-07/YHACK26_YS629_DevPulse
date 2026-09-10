@@ -381,9 +381,35 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
             sail_step_nm = baseline_daily_nm
             sliced_pts, next_pos, seg_heading = slice_polyline_by_distance(forward_polyline, sail_step_nm)
 
+            # ── Safety-push next_pos away from next-day drifted hazards ──────────────────
+            # After slicing along Day N's route, next_pos may sit inside a hazard that has
+            # drifted into that location by Day N+1. Check against Day N+1 hazard positions
+            # and push the ship radially outward to a safe standoff distance.
+            next_day_idx = day_idx + 1
+            if next_day_idx < len(daily_hazard_states):
+                next_hazards = daily_hazard_states[next_day_idx]["hazards"]
+                for h in next_hazards:
+                    center = h["center"]
+                    # Use buffer_radius_nm + 1 nm extra safety margin
+                    r_safe = float(h.get("buffer_radius_nm", 5.0)) + 1.0
+                    dist_to_center = haversine_nm(next_pos[0], next_pos[1], center[0], center[1])
+                    if dist_to_center < r_safe:
+                        # Radially push next_pos away from iceberg center to safe standoff
+                        push_nm = r_safe - dist_to_center + 0.5  # extra 0.5 nm margin
+                        escape_bearing_deg = calculate_bearing(center[0], center[1], next_pos[0], next_pos[1])
+                        escape_rad = np.radians(escape_bearing_deg)
+                        dlat = (push_nm / 60.0) * np.cos(escape_rad)
+                        dlon = (push_nm / 60.0) * np.sin(escape_rad) / np.cos(np.radians(center[0]))
+                        next_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
+                        print(f"    [Safety] Day {day_num}→{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} (drifted hazard)")
+                        # Update the last sliced point to reflect the corrected position
+                        if sliced_pts:
+                            sliced_pts[-1] = next_pos
+
             dist_traveled_so_far += sail_step_nm
             history_polyline = history_polyline[:-1] + sliced_pts
             current_pos = next_pos
+
 
     # Save multi-day contract
     multi_day_path = "src/contracts/multi_day_route_state.json"

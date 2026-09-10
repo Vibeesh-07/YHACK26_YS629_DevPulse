@@ -1,72 +1,72 @@
 {
   "forecast_start_date": "2026-09-10T00:00:00Z",
   "start_coords": [
-    -67.5,
-    -58.8
+    -58.4247,
+    -29.4873
   ],
   "dest_coords": [
-    -65.0,
-    -57.2
+    -53.4619,
+    -31.5967
   ],
   "corridor_bbox": {
-    "min_lat": -69.0,
-    "max_lat": -63.5,
-    "min_lon": -61.3,
-    "max_lon": -54.7
+    "min_lat": -59.92,
+    "max_lat": -51.96,
+    "min_lon": -34.1,
+    "max_lon": -26.99
   },
   "icebergs": [
     {
-      "id": "A57A",
-      "lat": -63.733,
-      "lon": -54.886,
-      "length_km": 41.78,
-      "width_km": 27.85,
+      "id": "A62",
+      "lat": -54.353,
+      "lon": -31.247,
+      "length_km": 71.57,
+      "width_km": 47.72,
       "thickness_m": 350.0,
-      "mass_kg": 366500000000000.0,
+      "mass_kg": 1076000000000000.0,
       "initial_u_vel": 0.25,
       "initial_v_vel": -0.1
     },
     {
-      "id": "A57B",
-      "lat": -65.051,
-      "lon": -59.123,
-      "length_km": 60.06,
-      "width_km": 40.04,
+      "id": "A62A",
+      "lat": -57.464,
+      "lon": -31.317,
+      "length_km": 102.6,
+      "width_km": 68.4,
       "thickness_m": 350.0,
-      "mass_kg": 757600000000000.0,
-      "initial_u_vel": 0.25,
-      "initial_v_vel": -0.1
-    },
-    {
-      "id": "A64",
-      "lat": -67.129,
-      "lon": -59.174,
-      "length_km": 50.89,
-      "width_km": 33.93,
-      "thickness_m": 350.0,
-      "mass_kg": 543900000000000.0,
+      "mass_kg": 2211000000000000.0,
       "initial_u_vel": 0.25,
       "initial_v_vel": -0.1
     },
     {
       "id": "A66",
-      "lat": -63.958,
-      "lon": -54.941,
-      "length_km": 30.0,
-      "width_km": 20.0,
-      "thickness_m": 337.1,
-      "mass_kg": 182100000000000.0,
+      "lat": -52.235,
+      "lon": -31.389,
+      "length_km": 68.94,
+      "width_km": 45.96,
+      "thickness_m": 350.0,
+      "mass_kg": 997900000000000.0,
       "initial_u_vel": 0.25,
       "initial_v_vel": -0.1
     },
     {
       "id": "A68A",
-      "lat": -64.094,
-      "lon": -54.712,
-      "length_km": 47.33,
-      "width_km": 31.55,
+      "lat": -52.651,
+      "lon": -33.01,
+      "length_km": 47.3,
+      "width_km": 31.53,
       "thickness_m": 350.0,
-      "mass_kg": 470400000000000.0,
+      "mass_kg": 469800000000000.0,
+      "initial_u_vel": 0.25,
+      "initial_v_vel": -0.1
+    },
+    {
+      "id": "A68C",
+      "lat": -52.862,
+      "lon": -27.788,
+      "length_km": 88.75,
+      "width_km": 59.17,
+      "thickness_m": 350.0,
+      "mass_kg": 1654000000000000.0,
       "initial_u_vel": 0.25,
       "initial_v_vel": -0.1
     }
