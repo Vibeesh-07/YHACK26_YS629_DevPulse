@@ -386,25 +386,49 @@ function renderMapLayers(dayData, ship) {
     const rCoreM   = h.iceberg_radius_nm * METERS_PER_NM;
     const rBufferM = h.buffer_radius_nm  * METERS_PER_NM;
 
-    L.circle(center, {
-      radius: rBufferM,
-      color: "#f59e0b", dashArray: "5,5",
-      weight: 1.5, fillColor: "#f59e0b", fillOpacity: 0.07
-    }).addTo(hazardsLayerGroup);
+    if (h.is_daughter) {
+      // Calved daughter fragment: vivid coral core with amber-orange repulsion ring
+      L.circle(center, {
+        radius: rBufferM,
+        color: "#fb923c", dashArray: "4,4",
+        weight: 1.5, fillColor: "#fb923c", fillOpacity: 0.09
+      }).addTo(hazardsLayerGroup);
 
-    L.circle(center, {
-      radius: rCoreM,
-      color: "#38bdf8", weight: 2,
-      fillColor: "#38bdf8", fillOpacity: 0.8
-    }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
+      L.circle(center, {
+        radius: rCoreM,
+        color: "#f43f5e", weight: 2,
+        fillColor: "#f43f5e", fillOpacity: 0.85
+      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
 
-    L.marker(center, {
-      icon: L.divIcon({
-        className: "",
-        html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#38bdf8;text-shadow:0 1px 4px #000">${h.id}</span>`,
-        iconAnchor: [-8, 10]
-      })
-    }).addTo(hazardsLayerGroup);
+      L.marker(center, {
+        icon: L.divIcon({
+          className: "",
+          html: `<span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;color:#f43f5e;text-shadow:0 1px 4px #000;background:rgba(244,63,94,0.18);padding:1px 4px;border-radius:3px;border:1px solid rgba(244,63,94,0.4);cursor:pointer">⚡ ${h.id}</span>`,
+          iconAnchor: [-8, 10]
+        })
+      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
+    } else {
+      // Parent tabular iceberg: cyan core with standard amber MC uncertainty ring
+      L.circle(center, {
+        radius: rBufferM,
+        color: "#f59e0b", dashArray: "5,5",
+        weight: 1.5, fillColor: "#f59e0b", fillOpacity: 0.07
+      }).addTo(hazardsLayerGroup);
+
+      L.circle(center, {
+        radius: rCoreM,
+        color: "#38bdf8", weight: 2,
+        fillColor: "#38bdf8", fillOpacity: 0.8
+      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
+
+      L.marker(center, {
+        icon: L.divIcon({
+          className: "",
+          html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#38bdf8;text-shadow:0 1px 4px #000;cursor:pointer">${h.id}</span>`,
+          iconAnchor: [-8, 10]
+        })
+      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
+    }
   });
 
   // Pan map to fit route
@@ -438,8 +462,29 @@ function makeIcebergPopup(h) {
   const cappedLabel = uncapped && parseFloat(h.total_hazard_radius_nm_uncapped) > parseFloat(h.buffer_radius_nm)
     ? `<span style="color:#f59e0b;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#888;font-size:10px">(capped)</span>`
     : `<strong>${h.buffer_radius_nm} nm</strong>`;
-  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px;line-height:1.6">
-    <strong style="color:#0284c7;font-size:13px">${h.id}</strong><br>
+
+  if (h.is_daughter) {
+    return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:210px;line-height:1.6">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <strong style="color:#f43f5e;font-size:13px">${h.id}</strong>
+        <span style="background:rgba(244,63,94,0.15);color:#e11d48;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid rgba(244,63,94,0.4)">CALVED FRAGMENT</span>
+      </div>
+      <span style="color:#555">Parent origin:</span> <strong style="color:#0284c7">${h.parent_id || 'Unknown'}</strong> (Day ${h.calved_day !== undefined ? h.calved_day : '—'})<br>
+      <span style="color:#555">Fragment size:</span> <strong>${h.length_m ? Math.round(h.length_m) : '—'}m × ${h.width_m ? Math.round(h.width_m) : '—'}m</strong><br>
+      <span style="color:#555">Physical radius:</span> <strong>${h.iceberg_radius_nm} nm</strong><br>
+      <span style="color:#555">95% MC drift spread:</span> <strong style="color:#888">${rawDisp}</strong><br>
+      <hr style="border:none;border-top:1px solid #ddd;margin:4px 0">
+      <span style="color:#555">Active avoidance zone:</span> ${cappedLabel}<br>
+      <span style="color:#10b981;font-size:10px;font-weight:600">✓ A* router actively cleared fragment</span><br>
+      <span style="color:#888;font-size:11px">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</span>
+    </div>`;
+  }
+
+  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px;line-height:1.6">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      <strong style="color:#0284c7;font-size:13px">${h.id}</strong>
+      <span style="background:rgba(2,132,199,0.12);color:#0284c7;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid rgba(2,132,199,0.3)">PARENT ICEBERG</span>
+    </div>
     <span style="color:#555">Physical radius:</span> <strong>${h.iceberg_radius_nm} nm</strong><br>
     <span style="color:#555">95% MC drift spread:</span> <strong style="color:#888">${rawDisp}</strong><br>
     <hr style="border:none;border-top:1px solid #ddd;margin:4px 0">
@@ -460,14 +505,31 @@ function renderIcebergList(hazards) {
   container.innerHTML = "";
   hazards.forEach(h => {
     const row = document.createElement("div");
-    row.className = "iceberg-row";
-    row.innerHTML = `
-      <span class="iceberg-name">&#x25CF; ${h.id}</span>
-      <div class="iceberg-meta">
-        <div>Core: ${h.iceberg_radius_nm} nm</div>
-        <div>Zone: ${h.buffer_radius_nm} nm</div>
-      </div>
-    `;
+    row.className = h.is_daughter ? "iceberg-row iceberg-daughter-row" : "iceberg-row";
+
+    if (h.is_daughter) {
+      row.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:flex;align-items:center;gap:5px">
+            <span class="iceberg-name daughter-name">&#x25CF; ${h.id}</span>
+            <span class="daughter-tag">CALVED</span>
+          </div>
+          <span style="font-size:0.65rem;color:var(--text-dim);font-family:var(--font-mono)">From: ${h.parent_id} (D${h.calved_day})</span>
+        </div>
+        <div class="iceberg-meta">
+          <div>Core: ${h.iceberg_radius_nm} nm</div>
+          <div>Zone: ${h.buffer_radius_nm} nm</div>
+        </div>
+      `;
+    } else {
+      row.innerHTML = `
+        <span class="iceberg-name">&#x25CF; ${h.id}</span>
+        <div class="iceberg-meta">
+          <div>Core: ${h.iceberg_radius_nm} nm</div>
+          <div>Zone: ${h.buffer_radius_nm} nm</div>
+        </div>
+      `;
+    }
     row.addEventListener("click", () => {
       map.setView(h.center, 8, { animate: true });
     });

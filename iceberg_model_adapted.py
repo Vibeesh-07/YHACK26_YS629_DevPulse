@@ -576,7 +576,7 @@ def iceberg_trajectory_parent(bergdims, start_location, start_datetime, prob,
 
             # ---- breakup (England et al. 2020, eq. 4, Poisson) ----
             xmax = np.pi / (2 ** 1.5) * buoy_len(bend_B(h[i]))
-            if prob > 0.0 and l[i] > 3 * xmax and SIC < 0.5 and i % break_days == 0:
+            if prob > 0.0 and l[i] > 3 * xmax and SIC < 0.75 and i % break_days == 0:
                 pfactor = float(break_days * prob)
                 if pfactor < 20:
                     break_number = int(poisson.rvs(pfactor))
@@ -608,6 +608,9 @@ def iceberg_trajectory_parent(bergdims, start_location, start_datetime, prob,
                         nt_max=nt_max - i)
                     child["n_calved"] = break_number
                     child["start_index"] = i
+                    child["initial_length_m"] = float(l2)
+                    child["initial_width_m"] = float(w2)
+                    child["initial_thickness_m"] = float(h2)
                     children.append(child)
 
             if w[i] > l[i]:
