@@ -391,11 +391,18 @@ function makeWaypointIcon(color, label) {
 }
 
 function makeIcebergPopup(h) {
-  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:160px">
+  const rawDisp = h.mc_95_dispersion_nm ? `${h.mc_95_dispersion_nm} nm` : "—";
+  const uncapped = h.total_hazard_radius_nm_uncapped ? `${h.total_hazard_radius_nm_uncapped} nm` : null;
+  const cappedLabel = uncapped && parseFloat(h.total_hazard_radius_nm_uncapped) > parseFloat(h.buffer_radius_nm)
+    ? `<span style="color:#f59e0b;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#888;font-size:10px">(capped)</span>`
+    : `<strong>${h.buffer_radius_nm} nm</strong>`;
+  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px;line-height:1.6">
     <strong style="color:#0284c7;font-size:13px">${h.id}</strong><br>
     <span style="color:#555">Physical radius:</span> <strong>${h.iceberg_radius_nm} nm</strong><br>
-    <span style="color:#555">95% MC uncertainty:</span> <strong>${h.mc_95_dispersion_nm || "—"} nm</strong><br>
-    <span style="color:#555">Total hazard zone:</span> <strong>${h.buffer_radius_nm} nm</strong><br>
+    <span style="color:#555">95% MC drift spread:</span> <strong style="color:#888">${rawDisp}</strong><br>
+    <hr style="border:none;border-top:1px solid #ddd;margin:4px 0">
+    <span style="color:#555">Active avoidance zone:</span> ${cappedLabel}<br>
+    <span style="color:#888;font-size:10px">A* router keeps ship outside this radius</span><br>
     <span style="color:#888;font-size:11px">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</span>
   </div>`;
 }
