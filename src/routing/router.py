@@ -472,7 +472,7 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=None):
                             next_pos = test_next_pos
                         else:
                             next_pos = find_nearest_water_coord(test_next_pos, land_mask_fn)
-                        print(f"    [Safety] Day {day_num}→{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} to water: {next_pos}")
+                        print(f"    [Safety] Day {day_num}->{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} to water: {next_pos}")
                         # Update the last sliced point to reflect the corrected position
                         if sliced_pts:
                             sliced_pts[-1] = next_pos
