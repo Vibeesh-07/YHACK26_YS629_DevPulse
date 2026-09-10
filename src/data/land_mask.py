@@ -55,11 +55,18 @@ def _fetch_geojson(url, cache_path):
 
 # ─── Build shapely geometry ──────────────────────────────────────────────────
 
+_CACHED_MERGED_GEOM = None
+
+
 def _build_merged_geometry():
-    """Return a single merged shapely geometry of all land + ice, or None."""
+    """Return a single merged shapely geometry of all land + ice, or None. Cached in memory."""
+    global _CACHED_MERGED_GEOM
+    if _CACHED_MERGED_GEOM is not None:
+        return _CACHED_MERGED_GEOM
     try:
         from shapely.geometry import shape
         from shapely.ops import unary_union
+        import shapely
 
         polys = []
         for key, (url, cache) in _SOURCES.items():
@@ -76,8 +83,11 @@ def _build_merged_geometry():
             return None
 
         merged = unary_union(polys)
-        log.info(f"Land geometry built from {len(polys)} polygons.")
-        return merged
+        if hasattr(shapely, "prepare"):
+            shapely.prepare(merged)
+        log.info(f"Land geometry built from {len(polys)} polygons and prepared.")
+        _CACHED_MERGED_GEOM = merged
+        return _CACHED_MERGED_GEOM
 
     except Exception as e:
         log.warning(f"shapely geometry build failed: {e}")
@@ -90,25 +100,37 @@ def build_land_mask_fn():
     """
     Returns callable land_mask_fn(lat, lon) -> bool.
     True = land / ice = impassable.
+    Ultra-fast C evaluation using shapely.contains_xy against prepared geometry.
     """
     geom = _build_merged_geometry()
 
     if geom is not None:
         try:
-            from shapely.prepared import prep
-            from shapely.geometry import Point
-            prepared = prep(geom)
+            import shapely
+            from shapely import contains_xy
+            if hasattr(shapely, "prepare"):
+                shapely.prepare(geom)
 
             def land_mask_fn(lat, lon):
-                # 1. Antarctica polar interior
                 if lat < -72.0:
                     return True
-                # 2. Authoritative Natural Earth 50m vector polygon
-                return prepared.contains(Point(lon, lat))
+                return bool(contains_xy(geom, float(lon), float(lat)))
 
             return land_mask_fn
         except Exception as e:
-            log.warning(f"PreparedGeometry failed: {e}")
+            try:
+                from shapely.prepared import prep
+                from shapely.geometry import Point
+                prepared = prep(geom)
+
+                def land_mask_fn(lat, lon):
+                    if lat < -72.0:
+                        return True
+                    return prepared.contains(Point(lon, lat))
+
+                return land_mask_fn
+            except Exception as e2:
+                log.warning(f"PreparedGeometry failed: {e2}")
 
     log.warning("Using hard-coded land heuristic only.")
     return _fallback_land_mask
@@ -117,7 +139,7 @@ def build_land_mask_fn():
 def build_land_mask_grid(lats, lons):
     """
     Precomputes a 2D boolean numpy array (nrows × ncols) where True = land.
-    Uses Natural Earth 50m vector polygons (fast vectorized check) + polar cap.
+    Uses Natural Earth 50m vector polygons clipped to the corridor bbox for sub-millisecond execution.
     Returns: (land_grid, land_mask_fn)
     """
     nrows, ncols = len(lats), len(lons)
@@ -131,24 +153,36 @@ def build_land_mask_grid(lats, lons):
     geom = _build_merged_geometry()
     if geom is not None:
         try:
+            import shapely
             from shapely import contains_xy
-            flat = contains_xy(geom, LON_2D.ravel(), LAT_2D.ravel())
+            from shapely.geometry import box
+
+            min_lat, max_lat = float(np.min(lats)), float(np.max(lats))
+            min_lon, max_lon = float(np.min(lons)), float(np.max(lons))
+            corridor_box = box(min_lon - 0.5, min_lat - 0.5, max_lon + 0.5, max_lat + 0.5)
+
+            local_geom = geom.intersection(corridor_box)
+            if hasattr(shapely, "prepare"):
+                shapely.prepare(local_geom)
+
+            flat = contains_xy(local_geom, LON_2D.ravel(), LAT_2D.ravel())
             shapely_grid = flat.reshape(nrows, ncols)
             land_grid = np.logical_or(land_grid, shapely_grid)
             log.info(f"Combined land grid: {land_grid.sum()}/{land_grid.size} cells blocked.")
-        except AttributeError:
-            from shapely.prepared import prep
-            from shapely.geometry import Point
-            prepared = prep(geom)
-            for r, lat in enumerate(lats):
-                for c, lon in enumerate(lons):
-                    if prepared.contains(Point(lon, lat)):
-                        land_grid[r, c] = True
-            log.info(f"Land grid (iterative): {land_grid.sum()}/{land_grid.size} cells blocked.")
         except Exception as e:
-            log.warning(f"Shapely grid scan error: {e}. Using heuristic fallback.")
-            heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
-            land_grid = np.logical_or(land_grid, heuristic_grid)
+            try:
+                from shapely.prepared import prep
+                from shapely.geometry import Point
+                prepared = prep(geom)
+                for r, lat in enumerate(lats):
+                    for c, lon in enumerate(lons):
+                        if prepared.contains(Point(lon, lat)):
+                            land_grid[r, c] = True
+                log.info(f"Land grid (iterative): {land_grid.sum()}/{land_grid.size} cells blocked.")
+            except Exception as e2:
+                log.warning(f"Shapely grid scan error: {e2}. Using heuristic fallback.")
+                heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
+                land_grid = np.logical_or(land_grid, heuristic_grid)
     else:
         heuristic_grid = np.vectorize(_fallback_land_mask)(LAT_2D, LON_2D)
         land_grid = np.logical_or(land_grid, heuristic_grid)

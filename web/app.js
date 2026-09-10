@@ -729,37 +729,54 @@ async function runRecalculate() {
 
 // ─── Loading Overlay ──────────────────────────────────────────────────────────
 
-let loadingStepTimer = null;
+let loadingStepTimers = [];
 
 function showLoading() {
   document.getElementById("loading-overlay").classList.remove("hidden");
-  [1,2,3,4].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     const el = document.getElementById(`lstep-${i}`);
-    el.className = "lstep";
-    el.classList.remove("done", "active");
+    if (el) {
+      el.className = "lstep";
+      el.innerHTML = "&#x2B21; " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
+    }
   });
 }
 
 function hideLoading() {
-  if (loadingStepTimer) { clearTimeout(loadingStepTimer); loadingStepTimer = null; }
-  document.getElementById("loading-overlay").classList.add("hidden");
+  loadingStepTimers.forEach(t => clearTimeout(t));
+  loadingStepTimers = [];
+  // Ensure all steps show as completed before closing overlay
+  [1, 2, 3, 4].forEach(i => {
+    const el = document.getElementById(`lstep-${i}`);
+    if (el) {
+      el.classList.remove("active");
+      el.classList.add("done");
+      el.innerHTML = "✓ " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
+    }
+  });
+  setTimeout(() => {
+    document.getElementById("loading-overlay").classList.add("hidden");
+  }, 350);
 }
 
 function animateLoadingSteps() {
-  const delays = [0, 2500, 5000, 8000];
+  loadingStepTimers.forEach(t => clearTimeout(t));
+  loadingStepTimers = [];
+  const delays = [0, 300, 600, 950];
   delays.forEach((delay, i) => {
-    loadingStepTimer = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (i > 0) {
         const prev = document.getElementById(`lstep-${i}`);
         if (prev) {
           prev.classList.remove("active");
           prev.classList.add("done");
-          prev.textContent = prev.textContent.replace("&#x2B21;", "✓").replace("⬡", "✓");
+          prev.innerHTML = "✓ " + prev.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
         }
       }
       const cur = document.getElementById(`lstep-${i + 1}`);
       if (cur) cur.classList.add("active");
     }, delay);
+    loadingStepTimers.push(timer);
   });
 }
 
