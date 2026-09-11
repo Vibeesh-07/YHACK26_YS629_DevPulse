@@ -193,22 +193,20 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=None):
       to the destination, avoiding day d's drifting icebergs and hazards.
       The historical sailed track from Start up to P_d remains fixed as the sailed voyage history.
     """
-    start_coords = [round(float(step1_state["start_coords"][0]), 4), round(float(step1_state["start_coords"][1]), 4)]
-    dest_coords = [round(float(step1_state["dest_coords"][0]), 4), round(float(step1_state["dest_coords"][1]), 4)]
-    bbox = step1_state["corridor_bbox"]
-    forecast_days = step2_output.get("forecast_days", 7)
-    daily_hazard_states = step2_output["daily_hazard_states"]
-
     from src.data.land_mask import build_land_mask_fn, find_nearest_water_coord
     land_mask_fn = build_land_mask_fn()
 
-    # Ensure departure and arrival are in open water (auto-snap if user input/clicked on land)
-    if land_mask_fn(start_coords[0], start_coords[1]):
-        start_coords = find_nearest_water_coord(start_coords, land_mask_fn)
-        print(f"  [Notice] Departure was on land; snapped to nearest navigable water: {start_coords}")
-    if land_mask_fn(dest_coords[0], dest_coords[1]):
-        dest_coords = find_nearest_water_coord(dest_coords, land_mask_fn)
-        print(f"  [Notice] Destination was on land; snapped to nearest navigable water: {dest_coords}")
+    start_coords = find_nearest_water_coord(
+        [round(float(step1_state["start_coords"][0]), 4), round(float(step1_state["start_coords"][1]), 4)],
+        land_mask_fn=land_mask_fn
+    )
+    dest_coords = find_nearest_water_coord(
+        [round(float(step1_state["dest_coords"][0]), 4), round(float(step1_state["dest_coords"][1]), 4)],
+        land_mask_fn=land_mask_fn
+    )
+    bbox = step1_state["corridor_bbox"]
+    forecast_days = step2_output.get("forecast_days", 7)
+    daily_hazard_states = step2_output["daily_hazard_states"]
 
     # Determine adaptive grid resolution based on corridor bounding box dimensions
     lat_span = bbox["max_lat"] - bbox["min_lat"]
@@ -467,11 +465,10 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=None):
                         escape_rad = np.radians(escape_bearing_deg)
                         dlat = (push_nm / 60.0) * np.cos(escape_rad)
                         dlon = (push_nm / 60.0) * np.sin(escape_rad) / np.cos(np.radians(center[0]))
-                        test_next_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
-                        if not land_mask_fn(test_next_pos[0], test_next_pos[1]):
-                            next_pos = test_next_pos
-                        else:
-                            next_pos = find_nearest_water_coord(test_next_pos, land_mask_fn)
+                        pushed_pos = [round(next_pos[0] + dlat, 4), round(next_pos[1] + dlon, 4)]
+                        if land_mask_fn(pushed_pos[0], pushed_pos[1]):
+                            pushed_pos = find_nearest_water_coord(pushed_pos, land_mask_fn=land_mask_fn)
+                        next_pos = pushed_pos
                         print(f"    [Safety] Day {day_num}->{day_num+1}: next_pos pushed {push_nm:.1f} nm from {h['id']} to water: {next_pos}")
                         # Update the last sliced point to reflect the corrected position
                         if sliced_pts:

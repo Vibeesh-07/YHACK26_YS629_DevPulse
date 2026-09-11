@@ -168,6 +168,17 @@ def execute_step1(start_coords, dest_coords, forecast_start_date=None, buffer_la
     if forecast_start_date is None:
         forecast_start_date = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
 
+    from src.data.land_mask import build_land_mask_fn, find_nearest_water_coord
+    land_fn = build_land_mask_fn()
+    orig_start = [round(float(start_coords[0]), 4), round(float(start_coords[1]), 4)]
+    orig_dest = [round(float(dest_coords[0]), 4), round(float(dest_coords[1]), 4)]
+    start_coords = find_nearest_water_coord(orig_start, land_mask_fn=land_fn)
+    dest_coords = find_nearest_water_coord(orig_dest, land_mask_fn=land_fn)
+    if start_coords != orig_start:
+        print(f"⚠️ [Land Avoidance] Starting point {orig_start} is on land. Marked down to nearby coast: {start_coords}")
+    if dest_coords != orig_dest:
+        print(f"⚠️ [Land Avoidance] Destination point {orig_dest} is on land. Marked down to nearby coast: {dest_coords}")
+
     bbox = compute_corridor_bbox(start_coords, dest_coords, buffer_lat, buffer_lon)
     corridor_icebergs = filter_icebergs_in_corridor(bbox)
 

@@ -235,6 +235,52 @@ def _fallback_land_mask(lat, lon):
     return False
 
 
+def find_nearest_water_coord(coord, land_mask_fn=None, max_search_nm=120.0, standoff_nm=0.6):
+    """
+    If coord is on land according to land_mask_fn, radially searches outward
+    to find the nearest navigable open-water coordinate (coastal snap).
+    Adds a small standoff margin (standoff_nm) away from the coastline so
+    vessels and routes do not sit right on coastal rocks or beaches.
+
+    Returns:
+      [snapped_lat, snapped_lon] (floats rounded to 4 decimal places)
+      If coord is already in water or no water is found within max_search_nm,
+      returns the original coord.
+    """
+    if coord is None or len(coord) < 2:
+        return coord
+
+    if land_mask_fn is None:
+        land_mask_fn = build_land_mask_fn()
+
+    lat0, lon0 = float(coord[0]), float(coord[1])
+    if not land_mask_fn(lat0, lon0):
+        return [round(lat0, 4), round(lon0, 4)]
+
+    cos_lat = max(0.1, np.cos(np.radians(lat0)))
+    # Start fine (0.5nm up to 30nm), then coarser (1.0nm up to max_search_nm)
+    dists = np.concatenate([
+        np.arange(0.5, 30.0, 0.5),
+        np.arange(30.0, max_search_nm + 1.0, 1.0)
+    ])
+
+    for dist_nm in dists:
+        deg_lat = dist_nm / 60.0
+        deg_lon = dist_nm / (60.0 * cos_lat)
+        for angle in np.linspace(0, 2 * np.pi, 36, endpoint=False):
+            test_lat = lat0 + deg_lat * np.sin(angle)
+            test_lon = lon0 + deg_lon * np.cos(angle)
+            if not land_mask_fn(test_lat, test_lon):
+                # Found open water: apply coastal standoff in the outward direction
+                standoff_lat = test_lat + (standoff_nm / 60.0) * np.sin(angle)
+                standoff_lon = test_lon + (standoff_nm / (60.0 * cos_lat)) * np.cos(angle)
+                if not land_mask_fn(standoff_lat, standoff_lon):
+                    return [round(float(standoff_lat), 4), round(float(standoff_lon), 4)]
+                return [round(float(test_lat), 4), round(float(test_lon), 4)]
+
+    log.warning(f"Could not find open water within {max_search_nm} nm of ({lat0}, {lon0})")
+    return [round(lat0, 4), round(lon0, 4)]
+
 
 # ─── CLI test ────────────────────────────────────────────────────────────────
 

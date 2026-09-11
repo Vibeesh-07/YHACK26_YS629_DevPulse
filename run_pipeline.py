@@ -52,10 +52,13 @@ def run_pipeline(start_coords, dest_coords, forecast_start_date=None, forecast_d
         save_path="src/contracts/initial_state.json"
     )
 
+    start_coords = step1_output["start_coords"]
+    dest_coords = step1_output["dest_coords"]
     bbox = step1_output["corridor_bbox"]
     icebergs = step1_output["icebergs"]
 
     print(f"✅ Bounding Box Defined (AOI) : Lat [{bbox['min_lat']}, {bbox['max_lat']}] | Lon [{bbox['min_lon']}, {bbox['max_lon']}]")
+    print(f"✅ Active Water Waypoints     : Origin {start_coords} -> Dest {dest_coords}")
     print(f"✅ Active Icebergs Located     : {len(icebergs)} icebergs within hazard range")
     print(f"💾 Contract A Generated       : src/contracts/initial_state.json\n")
 
