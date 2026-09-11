@@ -734,7 +734,32 @@ async function runRecalculate() {
     const totalDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : days;
     updateTimelineControls(totalDays);
     renderDay(0);
-    updateHeaderStatus(`Route recalculated (${totalDays} travel days) — ${new Date().toLocaleTimeString()}`, false);
+
+    // If start or destination coordinates were on land and marked down to nearby coast,
+    // update the input fields and notify the user
+    if (multiDayData.length > 0 && multiDayData[0].navigation) {
+      const nav = multiDayData[0].navigation;
+      const sCoords = nav.start.coords;
+      const dCoords = nav.destination.coords;
+      const startMoved = Math.abs(sCoords[0] - startLat) > 1e-4 || Math.abs(sCoords[1] - startLon) > 1e-4;
+      const destMoved  = Math.abs(dCoords[0] - destLat) > 1e-4 || Math.abs(dCoords[1] - destLon) > 1e-4;
+
+      if (startMoved || destMoved) {
+        document.getElementById("input-start-lat").value = sCoords[0];
+        document.getElementById("input-start-lon").value = sCoords[1];
+        document.getElementById("input-dest-lat").value  = dCoords[0];
+        document.getElementById("input-dest-lon").value  = dCoords[1];
+        let movedMsg = "Point on land marked down to nearby coast";
+        if (startMoved && destMoved) movedMsg = "Start & destination marked down to nearby coast";
+        else if (startMoved) movedMsg = "Starting point on land marked down to nearby coast";
+        else if (destMoved) movedMsg = "Destination on land marked down to nearby coast";
+        updateHeaderStatus(`${movedMsg} — Route calculated (${totalDays} travel days)`, false);
+      } else {
+        updateHeaderStatus(`Route recalculated (${totalDays} travel days) — ${new Date().toLocaleTimeString()}`, false);
+      }
+    } else {
+      updateHeaderStatus(`Route recalculated (${totalDays} travel days) — ${new Date().toLocaleTimeString()}`, false);
+    }
   } catch (err) {
     showError("Calculation failed: " + err.message);
     updateHeaderStatus("Route calculation failed", true);
