@@ -17,6 +17,13 @@ import sys
 import json
 import numpy as np
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Ensure project root is in sys.path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if PROJECT_ROOT not in sys.path:
@@ -26,6 +33,7 @@ from src.routing.cost_grid import CostGrid
 from src.routing.astar import find_risk_aware_route
 from src.routing.smoother import smooth_route_polyline
 from src.physics.monte_carlo import haversine_nm
+from src.data.land_mask import check_line_intersects_land, find_nearest_water_coord
 import iceberg_model_adapted as ima
 
 
@@ -270,40 +278,16 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
             if len(history_polyline) >= 2:
                 heading = calculate_bearing(history_polyline[-2][0], history_polyline[-2][1], current_pos[0], current_pos[1])
         else:
-            # 1. Fast Line-of-Sight Check from CURRENT POSITION to destination
-            num_samples = max(20, min(80, int(rem_straight_nm / 3.0)))
-            sample_lats = np.linspace(current_pos[0], dest_coords[0], num_samples)
-            sample_lons = np.linspace(current_pos[1], dest_coords[1], num_samples)
-            direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(sample_lats, sample_lons)]
+            # ── PRIORITY 1: Check whether there is a landmass between current_pos and destination ──
+            # Before checking for icebergs or attempting a straight path, verify land clearance.
+            # If a landmass (island, continent, shallow shelf) is present, the vessel MUST navigate
+            # around it via Risk-Aware A* instead of traveling on top of it.
+            has_land = check_line_intersects_land(current_pos, dest_coords, land_mask_fn=land_mask_fn)
 
-            direct_hits_land = any(land_mask_fn(p[0], p[1]) for p in direct_waypoints)
-            obstructed = direct_hits_land
-            min_h_dist = 999.0
-            for h in hazards:
-                center = h.get("center", [h.get("lat"), h.get("lon")])
-                if center[0] is None or center[1] is None:
-                    continue
-                r_buffer = float(h.get("buffer_radius_nm", 5.0))
-                dists = [haversine_nm(p[0], p[1], center[0], center[1]) for p in direct_waypoints]
-                min_d = min(dists) if dists else 999.0
-                if min_d < min_h_dist:
-                    min_h_dist = min_d
-                if min_d <= (r_buffer + 1.0):
-                    obstructed = True
-
-            if not obstructed:
-                # Fast path directly from current_pos to destination
-                forward_polyline = direct_waypoints
-                forward_dist_nm = round(rem_straight_nm, 1)
-                is_direct = True
-                nodes_eval = 0
-                closest_h = round(min_h_dist, 1)
-                heading = calculate_bearing(direct_waypoints[0][0], direct_waypoints[0][1],
-                                            direct_waypoints[1][0], direct_waypoints[1][1]) if len(direct_waypoints) > 1 else 0.0
-            else:
-                # Standard 2D Risk-Aware A* pathfinding from CURRENT POSITION to destination
+            if has_land:
+                # Landmass detected between points: MUST navigate around it via A*
                 cgrid = get_or_build_cost_grid()
-                astar_res = find_risk_aware_route(cgrid, current_pos, dest_coords, hazards)
+                astar_res = find_risk_aware_route(cgrid, current_pos, dest_coords, hazards, allow_direct=False)
                 smoothed_polyline = smooth_route_polyline(astar_res["waypoints"], land_mask_fn=land_mask_fn)
 
                 fwd_d = 0.0
@@ -312,11 +296,58 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
                                           smoothed_polyline[i + 1][0], smoothed_polyline[i + 1][1])
                 forward_polyline = smoothed_polyline
                 forward_dist_nm = round(fwd_d, 1)
-                is_direct = astar_res.get("is_direct", False)
+                is_direct = False
                 nodes_eval = astar_res.get("nodes_evaluated", 0)
                 closest_h = calculate_closest_hazard_nm(forward_polyline, hazards)
                 heading = calculate_bearing(forward_polyline[0][0], forward_polyline[0][1],
                                             forward_polyline[1][0], forward_polyline[1][1]) if len(forward_polyline) > 1 else 0.0
+            else:
+                # ── PRIORITY 2: No landmass between points. Now check whether an iceberg threatens the path ──
+                num_samples = max(20, min(100, int(rem_straight_nm / 1.5)))
+                sample_lats = np.linspace(current_pos[0], dest_coords[0], num_samples)
+                sample_lons = np.linspace(current_pos[1], dest_coords[1], num_samples)
+                direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(sample_lats, sample_lons)]
+
+                iceberg_obstructed = False
+                min_h_dist = 999.0
+                for h in hazards:
+                    center = h.get("center", [h.get("lat"), h.get("lon")])
+                    if center[0] is None or center[1] is None:
+                        continue
+                    r_buffer = float(h.get("buffer_radius_nm", 5.0))
+                    dists = [haversine_nm(p[0], p[1], center[0], center[1]) for p in direct_waypoints]
+                    min_d = min(dists) if dists else 999.0
+                    if min_d < min_h_dist:
+                        min_h_dist = min_d
+                    if min_d <= (r_buffer + 1.0):
+                        iceberg_obstructed = True
+
+                if not iceberg_obstructed:
+                    # No landmass and no iceberg: follow direct straight path
+                    forward_polyline = direct_waypoints
+                    forward_dist_nm = round(rem_straight_nm, 1)
+                    is_direct = True
+                    nodes_eval = 0
+                    closest_h = round(min_h_dist, 1)
+                    heading = calculate_bearing(direct_waypoints[0][0], direct_waypoints[0][1],
+                                                direct_waypoints[1][0], direct_waypoints[1][1]) if len(direct_waypoints) > 1 else 0.0
+                else:
+                    # Iceberg obstruction detected: navigate around it via A*
+                    cgrid = get_or_build_cost_grid()
+                    astar_res = find_risk_aware_route(cgrid, current_pos, dest_coords, hazards, allow_direct=False)
+                    smoothed_polyline = smooth_route_polyline(astar_res["waypoints"], land_mask_fn=land_mask_fn)
+
+                    fwd_d = 0.0
+                    for i in range(len(smoothed_polyline) - 1):
+                        fwd_d += haversine_nm(smoothed_polyline[i][0], smoothed_polyline[i][1],
+                                              smoothed_polyline[i + 1][0], smoothed_polyline[i + 1][1])
+                    forward_polyline = smoothed_polyline
+                    forward_dist_nm = round(fwd_d, 1)
+                    is_direct = False
+                    nodes_eval = astar_res.get("nodes_evaluated", 0)
+                    closest_h = calculate_closest_hazard_nm(forward_polyline, hazards)
+                    heading = calculate_bearing(forward_polyline[0][0], forward_polyline[0][1],
+                                                forward_polyline[1][0], forward_polyline[1][1]) if len(forward_polyline) > 1 else 0.0
 
         # Full combined route for Day d: sailed history + dynamic forward route
         if forward_dist_nm == 0.0 or current_pos == dest_coords:
@@ -438,13 +469,13 @@ def solve_multiday_routes(step1_state, step2_output, res_deg=0.06):
     os.makedirs(os.path.dirname(multi_day_path), exist_ok=True)
     with open(multi_day_path, "w") as f:
         json.dump(all_days_data, f, indent=2)
-    print(f"\n💾 Full {forecast_days}-Day Route State saved to: {multi_day_path}")
+    print(f"\n[Saved] Full {forecast_days}-Day Route State saved to: {multi_day_path}")
 
     active_contract_path = "src/contracts/route_day_state.json"
     active_day = all_days_data[2] if len(all_days_data) >= 3 else all_days_data[0]
     with open(active_contract_path, "w") as f:
         json.dump(active_day, f, indent=2)
-    print(f"💾 Active Contract B updated: {active_contract_path} (Day {active_day['day']})")
+    print(f"[Saved] Active Contract B updated: {active_contract_path} (Day {active_day['day']})")
 
     return all_days_data
 

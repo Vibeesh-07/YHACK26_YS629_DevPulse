@@ -97,45 +97,44 @@ function makeVesselIcon(ship) {
     className: "vessel-div-icon",
     html: `
       <div class="vessel-icon-container" title="Research Vessel Explorer">
-        <div class="radar-pulse-ring"></div>
         <svg class="vessel-marker-svg" viewBox="0 0 36 36" style="transform: rotate(${heading}deg);">
           <!-- Ship Hull pointing 0 deg (North) -->
           <path d="M18,2 L27,24 C27,28 22,32 18,34 C14,32 9,28 9,24 Z" 
-                fill="#0284c7" stroke="#38bdf8" stroke-width="2" />
+                fill="#0284c7" stroke="#38bdf8" stroke-width="1.8" />
           <!-- Superstructure -->
           <polygon points="18,8 23,22 18,19 13,22" fill="#e0f2fe" opacity="0.95" />
           <!-- Navigation mast light -->
-          <circle cx="18" cy="12" r="2.5" fill="#f59e0b" />
+          <circle cx="18" cy="12" r="2.2" fill="#38bdf8" />
           <!-- Bow guide line -->
           <line x1="18" y1="2" x2="18" y2="7" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
         </svg>
       </div>
     `,
-    iconSize: [44, 44],
-    iconAnchor: [22, 22]
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
   });
 }
 
 function makeVesselPopup(dayData, ship) {
   return `
-    <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px">
-      <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
+    <div class="glass-popup">
+      <div class="popup-title">Research Vessel Explorer</div>
       ${(ship.progress_pct >= 100 || ship.distance_remaining_nm === 0)
-        ? `<div style="margin:5px 0;padding:4px 6px;background:#f0fdf4;border-radius:4px;border-left:3px solid #10b981">
-             <strong style="color:#15803d">&#x2714; Voyage Completed (100%)</strong><br>
-             <span style="font-size:10.5px;color:#166534">Arrived at destination</span>
+        ? `<div class="popup-status-badge badge-arrived">
+             <strong>Voyage Completed (100%)</strong><br>
+             <span>Arrived at destination</span>
            </div>`
-        : `<div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
+        : `<div class="popup-status-badge badge-enroute">
              <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
-             <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
+             <span>Route re-planned from current vessel position</span>
            </div>`
       }
-      <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
-      <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
-      <span style="color:#555">Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
-      <span style="color:#555">Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong><br>
-      <span style="color:#555">Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong><br>
-      <span style="color:#888;font-size:11px">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</span>
+      <div class="popup-row"><span>Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong></div>
+      <div class="popup-row"><span>Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong></div>
+      <div class="popup-row"><span>Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong></div>
+      <div class="popup-row"><span>Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong></div>
+      <div class="popup-row"><span>Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong></div>
+      <div class="popup-coords">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</div>
     </div>
   `;
 }
@@ -302,14 +301,14 @@ function renderMapLayers(dayData, ship) {
   const dest  = nav.destination.coords;
 
   // Start marker
-  L.marker(start, { icon: makeWaypointIcon("#10b981", "S") })
-    .bindTooltip(`Start: [${start[0].toFixed(3)}, ${start[1].toFixed(3)}]`,
+  L.marker(start, { icon: makeWaypointIcon("#2dd4bf", "S") })
+    .bindTooltip(`Origin: [${start[0].toFixed(3)}, ${start[1].toFixed(3)}]`,
       { permanent: false, direction: "left" })
     .addTo(waypointsLayerGroup);
 
   // Destination marker
-  L.marker(dest, { icon: makeWaypointIcon("#f59e0b", "D") })
-    .bindTooltip(`Dest: [${dest[0].toFixed(3)}, ${dest[1].toFixed(3)}]`,
+  L.marker(dest, { icon: makeWaypointIcon("#fbbf24", "D") })
+    .bindTooltip(`Destination: [${dest[0].toFixed(3)}, ${dest[1].toFixed(3)}]`,
       { permanent: false, direction: "right" })
     .addTo(waypointsLayerGroup);
 
@@ -340,24 +339,15 @@ function renderMapLayers(dayData, ship) {
     : (!isArrived && nav.route_polyline && nav.route_polyline.length > 1 ? nav.route_polyline : null);
 
   if (forwardPoints && forwardPoints.length > 1) {
-    // Outer emerald glow
+    // Primary dynamic forward route line (clean, crisp, no glow)
     L.polyline(forwardPoints, {
-      color: "#10b981",
-      weight: 10,
-      opacity: 0.22,
-      lineCap: "round",
-      lineJoin: "round"
-    }).addTo(routeLayerGroup);
-
-    // Primary dynamic forward route line
-    L.polyline(forwardPoints, {
-      color: "#10b981",
+      color: "#2dd4bf",
       weight: 3.5,
       opacity: 0.95,
       lineCap: "round",
       lineJoin: "round"
     })
-      .bindTooltip(`Dynamic route from current position (${ship.distance_remaining_nm || 0} nm remaining)`, {
+      .bindTooltip(`Dynamic route (${ship.distance_remaining_nm || 0} nm remaining)`, {
         permanent: false,
         direction: "center"
       })
@@ -367,8 +357,8 @@ function renderMapLayers(dayData, ship) {
   // Moving Ship Marker (positioned at current position P_d)
   if (ship && ship.coords) {
     const vesselTooltipText = isArrived
-      ? `🚢 MV Explorer — Day ${dayData.day} (100% — Arrived at Destination)`
-      : `🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`;
+      ? `MV Explorer — Day ${dayData.day} (100% — Arrived at Destination)`
+      : `MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`;
 
     L.marker(ship.coords, {
       icon: makeVesselIcon(ship),
@@ -388,8 +378,8 @@ function renderMapLayers(dayData, ship) {
 
     L.circle(center, {
       radius: rBufferM,
-      color: "#f59e0b", dashArray: "5,5",
-      weight: 1.5, fillColor: "#f59e0b", fillOpacity: 0.07
+      color: "#fbbf24", dashArray: "5,5",
+      weight: 1.5, fillColor: "#fbbf24", fillOpacity: 0.08
     }).addTo(hazardsLayerGroup);
 
     L.circle(center, {
@@ -401,7 +391,7 @@ function renderMapLayers(dayData, ship) {
     L.marker(center, {
       icon: L.divIcon({
         className: "",
-        html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#38bdf8;text-shadow:0 1px 4px #000">${h.id}</span>`,
+        html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#7dd3fc">${h.id}</span>`,
         iconAnchor: [-8, 10]
       })
     }).addTo(hazardsLayerGroup);
@@ -419,14 +409,9 @@ function renderMapLayers(dayData, ship) {
 function makeWaypointIcon(color, label) {
   return L.divIcon({
     className: "",
-    html: `<div style="
-      width:28px;height:28px;border-radius:50%;
-      background:${color};border:2.5px solid #fff;
-      box-shadow:0 0 14px ${color};
-      display:flex;align-items:center;justify-content:center;
-      font-family:'JetBrains Mono',monospace;font-size:11px;
-      font-weight:700;color:#fff;
-    ">${label}</div>`,
+    html: `<div class="glass-waypoint" style="--wp-color: ${color};">
+      <span>${label}</span>
+    </div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
@@ -436,16 +421,16 @@ function makeIcebergPopup(h) {
   const rawDisp = h.mc_95_dispersion_nm ? `${h.mc_95_dispersion_nm} nm` : "—";
   const uncapped = h.total_hazard_radius_nm_uncapped ? `${h.total_hazard_radius_nm_uncapped} nm` : null;
   const cappedLabel = uncapped && parseFloat(h.total_hazard_radius_nm_uncapped) > parseFloat(h.buffer_radius_nm)
-    ? `<span style="color:#f59e0b;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#888;font-size:10px">(capped)</span>`
+    ? `<span style="color:#fbbf24;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#94a3b8;font-size:10px">(capped)</span>`
     : `<strong>${h.buffer_radius_nm} nm</strong>`;
-  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px;line-height:1.6">
-    <strong style="color:#0284c7;font-size:13px">${h.id}</strong><br>
-    <span style="color:#555">Physical radius:</span> <strong>${h.iceberg_radius_nm} nm</strong><br>
-    <span style="color:#555">95% MC drift spread:</span> <strong style="color:#888">${rawDisp}</strong><br>
-    <hr style="border:none;border-top:1px solid #ddd;margin:4px 0">
-    <span style="color:#555">Active avoidance zone:</span> ${cappedLabel}<br>
-    <span style="color:#888;font-size:10px">A* router keeps ship outside this radius</span><br>
-    <span style="color:#888;font-size:11px">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</span>
+  return `<div class="glass-popup">
+    <div class="popup-title">${h.id}</div>
+    <div class="popup-row"><span>Physical Radius:</span> <strong>${h.iceberg_radius_nm} nm</strong></div>
+    <div class="popup-row"><span>95% Drift Spread:</span> <strong>${rawDisp}</strong></div>
+    <div class="popup-divider"></div>
+    <div class="popup-row"><span>Avoidance Zone:</span> ${cappedLabel}</div>
+    <div class="popup-hint">A* router keeps ship outside this radius</div>
+    <div class="popup-coords">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</div>
   </div>`;
 }
 
@@ -462,7 +447,7 @@ function renderIcebergList(hazards) {
     const row = document.createElement("div");
     row.className = "iceberg-row";
     row.innerHTML = `
-      <span class="iceberg-name">&#x25CF; ${h.id}</span>
+      <span class="iceberg-id-tag">${h.id}</span>
       <div class="iceberg-meta">
         <div>Core: ${h.iceberg_radius_nm} nm</div>
         <div>Zone: ${h.buffer_radius_nm} nm</div>
@@ -780,7 +765,6 @@ function showLoading() {
     const el = document.getElementById(`lstep-${i}`);
     if (el) {
       el.className = "lstep";
-      el.innerHTML = "&#x2B21; " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
     }
   });
 }
@@ -788,13 +772,11 @@ function showLoading() {
 function hideLoading() {
   loadingStepTimers.forEach(t => clearTimeout(t));
   loadingStepTimers = [];
-  // Ensure all steps show as completed before closing overlay
   [1, 2, 3, 4].forEach(i => {
     const el = document.getElementById(`lstep-${i}`);
     if (el) {
       el.classList.remove("active");
       el.classList.add("done");
-      el.innerHTML = "✓ " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
     }
   });
   setTimeout(() => {
@@ -813,7 +795,6 @@ function animateLoadingSteps() {
         if (prev) {
           prev.classList.remove("active");
           prev.classList.add("done");
-          prev.innerHTML = "✓ " + prev.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
         }
       }
       const cur = document.getElementById(`lstep-${i + 1}`);
@@ -839,11 +820,14 @@ function updateHeaderStatus(msg, isError) {
   const title = document.getElementById("header-status-title");
   title.textContent = msg;
   const dot = document.getElementById("pulse-dot");
-  dot.style.background = isError ? "#ef4444" : "#10b981";
-  dot.style.boxShadow  = isError ? "0 0 10px #ef4444" : "0 0 10px #10b981";
+  dot.style.background = isError ? "#f87171" : "#2dd4bf";
+  dot.style.boxShadow  = "none";
 }
 
 // ─── Playback ─────────────────────────────────────────────────────────────────
+
+const PLAY_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>`;
+const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>`;
 
 function togglePlayback() {
   isPlaying = !isPlaying;
@@ -851,7 +835,7 @@ function togglePlayback() {
 
   if (isPlaying) {
     if (multiDayData.length === 0) { isPlaying = false; return; }
-    icon.textContent = "❚❚";
+    icon.innerHTML = PAUSE_ICON_SVG;
     playInterval = setInterval(() => {
       const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : 7;
       let next = currentDay + 1;
@@ -859,7 +843,7 @@ function togglePlayback() {
       renderDay(next);
     }, 1500);
   } else {
-    icon.textContent = "▶";
+    icon.innerHTML = PLAY_ICON_SVG;
     clearInterval(playInterval);
   }
 }

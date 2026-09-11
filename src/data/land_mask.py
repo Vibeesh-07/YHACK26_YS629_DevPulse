@@ -255,6 +255,62 @@ def find_nearest_water_coord(coord, land_mask_fn=None, max_search_nm=120.0, stan
     return [round(lat0, 4), round(lon0, 4)]
 
 
+def check_line_intersects_land(p1, p2, land_mask_fn=None):
+    """
+    Rigorously checks whether the direct line between p1 and p2 intersects any landmass,
+    island, coast, or continental shelf.
+
+    Checks performed in order:
+      1. Endpoints check: if p1 or p2 sits on land, returns True.
+      2. Polar interior check: if path dips south of -72.0, returns True.
+      3. Continuous Shapely LineString intersection against prepared 50m vector polygons.
+      4. Dense sub-nautical-mile sampling (every 0.25 nm) against land_mask_fn.
+
+    Returns:
+      bool: True if ANY landmass is between p1 and p2, False if completely unobstructed water.
+    """
+    if p1 is None or p2 is None or len(p1) < 2 or len(p2) < 2:
+        return True
+
+    lat1, lon1 = float(p1[0]), float(p1[1])
+    lat2, lon2 = float(p2[0]), float(p2[1])
+
+    if land_mask_fn is None:
+        land_mask_fn = build_land_mask_fn()
+
+    # 1. Endpoints check
+    if land_mask_fn(lat1, lon1) or land_mask_fn(lat2, lon2):
+        return True
+
+    # 2. Polar interior check
+    if min(lat1, lat2) < -72.0:
+        return True
+
+    # 3. Continuous Shapely vector LineString intersection
+    geom = _build_merged_geometry()
+    if geom is not None:
+        try:
+            from shapely.geometry import LineString
+            line = LineString([(lon1, lat1), (lon2, lat2)])
+            if line.intersects(geom):
+                return True
+        except Exception as e:
+            log.warning(f"LineString.intersects failed: {e}")
+
+    # 4. Dense sub-nautical-mile sampling (0.25 nm intervals)
+    cos_lat = max(0.1, np.cos(np.radians((lat1 + lat2) / 2.0)))
+    dist_nm = np.hypot(lat2 - lat1, (lon2 - lon1) * cos_lat) * 60.0
+    n_samples = max(30, int(dist_nm / 0.25))
+    sample_lats = np.linspace(lat1, lat2, n_samples)
+    sample_lons = np.linspace(lon1, lon2, n_samples)
+
+    for la, lo in zip(sample_lats, sample_lons):
+        if land_mask_fn(la, lo):
+            return True
+
+    return False
+
+
 # ─── CLI test ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

@@ -7,7 +7,8 @@
   <meta name="description" content="Real-time Antarctic sea-ice navigation with Risk-Aware A* pathfinding, Monte Carlo hazard estimation, and EWE20 iceberg drift physics.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.cdnfonts.com/css/glacial-indifference-2" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -15,42 +16,53 @@
 
   <!-- Loading Overlay -->
   <div class="loading-overlay hidden" id="loading-overlay">
-    <div class="loading-card">
+    <div class="loading-card glass-panel">
       <div class="loading-spinner"></div>
       <div class="loading-text">
-        <div class="loading-title" id="loading-title">Running A* Pipeline...</div>
-        <div class="loading-sub">Monte Carlo ensemble + drift physics</div>
+        <div class="loading-title" id="loading-title">RUNNING A* PIPELINE</div>
+        <div class="loading-sub">Monte Carlo ensemble &amp; drift physics calculation</div>
       </div>
       <div class="loading-steps">
-        <div class="lstep" id="lstep-1">&#x2B21; Corridor &amp; iceberg detection</div>
-        <div class="lstep" id="lstep-2">&#x2B21; EWE20 drift + Monte Carlo (N=50)</div>
-        <div class="lstep" id="lstep-3">&#x2B21; Risk-Aware A* pathfinding</div>
-        <div class="lstep" id="lstep-4">&#x2B21; Spline smoothing &amp; KPI generation</div>
+        <div class="lstep" id="lstep-1">Corridor &amp; iceberg identification</div>
+        <div class="lstep" id="lstep-2">EWE20 drift &amp; Monte Carlo simulation</div>
+        <div class="lstep" id="lstep-3">Risk-Aware A* pathfinding</div>
+        <div class="lstep" id="lstep-4">Spline smoothing &amp; KPI analytics</div>
       </div>
     </div>
   </div>
 
   <div class="app-container">
     <!-- Header Bar -->
-    <header class="app-header">
+    <header class="app-header glass-header">
       <div class="header-left">
         <div class="status-indicator">
           <span class="pulse-dot" id="pulse-dot"></span>
-          <h1 id="header-status-title">Antarctic Navigation &mdash; Ready</h1>
+          <h1 id="header-status-title">ANTARCTIC NAVIGATION &mdash; READY</h1>
         </div>
         <p class="header-subtitle">Weddell &amp; Scotia Corridor &middot; Risk-Aware A* &middot; EWE20 Drift Physics</p>
       </div>
       <div class="header-right">
         <div class="badge badge-warning" id="badge-hazards">
-          <span class="badge-icon">&#x26A0;&#xFE0F;</span>
-          <span id="badge-hazards-text">&#x2014; hazards</span>
+          <svg class="badge-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span id="badge-hazards-text">&mdash; hazards</span>
         </div>
         <div class="badge badge-success" id="badge-confidence">
-          <span class="badge-icon">&#x1F6E1;&#xFE0F;</span>
-          <span id="badge-confidence-text">&#x2014;% confidence</span>
+          <svg class="badge-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            <polyline points="9 12 11 14 15 10"></polyline>
+          </svg>
+          <span id="badge-confidence-text">&mdash;% confidence</span>
         </div>
         <div class="badge badge-info" id="badge-mode">
-          <span class="badge-icon">&#x1F5FA;&#xFE0F;</span>
+          <svg class="badge-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon>
+            <line x1="8" y1="2" x2="8" y2="18"></line>
+            <line x1="16" y1="6" x2="16" y2="22"></line>
+          </svg>
           <span id="badge-mode-text">Enter coords or pick on map</span>
         </div>
       </div>
@@ -63,14 +75,14 @@
         <div id="polar-map"></div>
 
         <!-- On-map Legend -->
-        <div class="map-legend">
+        <div class="map-legend glass-panel">
           <div class="legend-item">
             <span class="legend-symbol symbol-iceberg"></span>
             <span>Iceberg core</span>
           </div>
           <div class="legend-item">
             <span class="legend-symbol symbol-buffer"></span>
-            <span>95% MC hazard</span>
+            <span>95% MC zone</span>
           </div>
           <div class="legend-item">
             <span class="legend-symbol symbol-wake"></span>
@@ -81,7 +93,9 @@
             <span>Dynamic route</span>
           </div>
           <div class="legend-item">
-            <span class="legend-symbol symbol-ship">&#x1F6A2;</span>
+            <svg class="legend-ship-svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 19 18 12 15 5 18 12 2"></polygon>
+            </svg>
             <span>Vessel (Current)</span>
           </div>
           <div class="legend-sep"></div>
@@ -96,34 +110,57 @@
         </div>
 
         <!-- Map click hint toast -->
-        <div class="map-click-hint hidden" id="map-click-hint">
-          <span class="hint-icon">&#x1F446;</span>
+        <div class="map-click-hint glass-toast hidden" id="map-click-hint">
+          <svg class="toast-svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="22" y1="12" x2="18" y2="12"></line>
+            <line x1="6" y1="12" x2="2" y2="12"></line>
+            <line x1="12" y1="6" x2="12" y2="2"></line>
+            <line x1="12" y1="22" x2="12" y2="18"></line>
+          </svg>
           <span>Click map to place <strong id="hint-next-point">Start</strong> point</span>
           <button class="hint-cancel" id="hint-cancel">Cancel</button>
         </div>
       </main>
 
       <!-- Right Sidebar -->
-      <aside class="sidebar-kpis">
+      <aside class="sidebar-kpis glass-sidebar">
 
-        <!-- Coordinate Input Panel (always visible) -->
-        <div class="coord-panel">
+        <!-- Coordinate Input Panel -->
+        <div class="coord-panel glass-panel">
           <div class="coord-panel-header">
-            <span class="coord-panel-title">&#x1F4CD; Navigation Parameters</span>
+            <div class="coord-panel-title">
+              <svg class="panel-title-svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+              </svg>
+              <span>Navigation Parameters</span>
+            </div>
             <button class="btn-map-click" id="btn-pick-on-map" title="Click map to set waypoints">
-              &#x1F5B1; Pick on map
+              <svg class="btn-svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+              <span>Pick on Map</span>
             </button>
           </div>
 
           <!-- Benchmark Test Scenarios Selector -->
-          <div class="preset-group">
+          <div class="preset-group glass-inset">
             <div class="preset-label">
-              <span>&#x1F9ED; Preset Test Scenarios</span>
+              <div class="preset-label-title">
+                <svg class="preset-title-svg" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                  <polyline points="2 17 12 22 22 17"></polyline>
+                  <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <span>Preset Scenarios</span>
+              </div>
             </div>
             <select id="select-preset" class="preset-select">
               <option value="" selected>-- Select a verified dataset --</option>
               <option value="1">1. South Georgia Land Avoidance (3d)</option>
-              <option value="2">2. King George Island &rarr; South Orkneys (4d)</option>
+              <option value="2">2. King George Island to South Orkneys (4d)</option>
               <option value="3">3. Bransfield Strait Archipelago Transit (2d)</option>
               <option value="4">4. Weddell Sea Iceberg Alley Escape (4d)</option>
               <option value="5">5. Drake Passage Deep Ocean Baseline (3d)</option>
@@ -137,7 +174,7 @@
           <form id="coords-form" autocomplete="off">
             <div class="coord-row-label">
               <span class="coord-dot start-dot"></span>
-              <span class="coord-row-title">Start Point</span>
+              <span class="coord-row-title">Origin / Start</span>
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -173,7 +210,7 @@
               <div class="form-group">
                 <label>Travel Days</label>
                 <div class="input-with-unit">
-                  <input type="number" min="1" max="14" id="input-days" value="5" placeholder="5">
+                  <input type="number" min="1" max="14" id="input-days" value="7" placeholder="7">
                   <span class="input-suffix">days</span>
                 </div>
               </div>
@@ -181,8 +218,12 @@
 
             <div class="recalc-row">
               <button type="submit" class="btn btn-primary" id="btn-recalculate">
-                <span id="btn-recalc-icon">&#x1F504;</span>
-                <span id="btn-recalc-label">Recalculate A* Route</span>
+                <svg class="btn-recalc-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span id="btn-recalc-label">Recalculate Route</span>
               </button>
             </div>
 
@@ -193,66 +234,66 @@
         </div>
 
         <!-- Vessel Speed & Motion KPI -->
-        <div class="kpi-card highlight-card">
+        <div class="kpi-card highlight-card glass-panel">
           <div class="kpi-header-row">
-            <span class="kpi-label">Average Ship Speed</span>
-            <span class="kpi-live-badge">&#x25CF; DYNAMIC</span>
+            <span class="kpi-label">Average Vessel Speed</span>
+            <span class="kpi-live-badge">DYNAMIC</span>
           </div>
           <div class="kpi-value-container">
-            <span class="kpi-value" id="kpi-speed">&#x2014;</span>
+            <span class="kpi-value" id="kpi-speed">&mdash;</span>
             <span class="kpi-unit">knots</span>
           </div>
-          <span class="kpi-hint" id="kpi-speed-hint">Daily run: &#x2014; nm/day</span>
+          <span class="kpi-hint" id="kpi-speed-hint">Daily run: &mdash; nm/day</span>
         </div>
 
         <!-- Vessel Voyage Progress KPI -->
-        <div class="kpi-card">
+        <div class="kpi-card glass-panel">
           <div class="kpi-header-row">
-            <span class="kpi-label">Vessel Waypoint Progress</span>
-            <span class="vessel-badge" id="vessel-badge">Day 1</span>
+            <span class="kpi-label">Voyage Progress</span>
+            <span class="vessel-badge" id="vessel-badge">Day 0</span>
           </div>
           <div class="kpi-value-container">
-            <span class="kpi-value" id="kpi-progress">&#x2014;</span>
+            <span class="kpi-value" id="kpi-progress">&mdash;</span>
             <span class="kpi-unit">%</span>
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="vessel-progress-bar" style="width: 0%;"></div>
           </div>
-          <span class="kpi-hint" id="kpi-progress-hint">Traveled: &#x2014; nm | Remaining: &#x2014; nm</span>
+          <span class="kpi-hint" id="kpi-progress-hint">Traveled: &mdash; nm | Remaining: &mdash; nm</span>
         </div>
 
         <!-- Secondary KPI Cards Grid -->
         <div class="kpi-metrics-grid">
-          <div class="kpi-card">
-            <span class="kpi-label">Route distance</span>
+          <div class="kpi-card glass-panel">
+            <span class="kpi-label">Route Distance</span>
             <div class="kpi-value-container">
-              <span class="kpi-value" id="kpi-distance">&#x2014;</span>
+              <span class="kpi-value" id="kpi-distance">&mdash;</span>
               <span class="kpi-unit">nm</span>
             </div>
-            <span class="kpi-hint">Optimal path</span>
+            <span class="kpi-hint">Optimal trajectory</span>
           </div>
 
-          <div class="kpi-card">
-            <span class="kpi-label">Closest hazard</span>
+          <div class="kpi-card glass-panel">
+            <span class="kpi-label">Closest Hazard</span>
             <div class="kpi-value-container">
-              <span class="kpi-value" id="kpi-hazard">&#x2014;</span>
+              <span class="kpi-value" id="kpi-hazard">&mdash;</span>
               <span class="kpi-unit">nm</span>
             </div>
             <span class="kpi-status-badge status-safe" id="kpi-hazard-status">Awaiting route</span>
           </div>
 
-          <div class="kpi-card kpi-card-span-2">
-            <span class="kpi-label">Icebergs tracked</span>
+          <div class="kpi-card kpi-card-span-2 glass-panel">
+            <span class="kpi-label">Icebergs Tracked</span>
             <div class="kpi-value-container">
-              <span class="kpi-value" id="kpi-icebergs">&#x2014;</span>
-              <span class="kpi-unit">active</span>
+              <span class="kpi-value" id="kpi-icebergs">&mdash;</span>
+              <span class="kpi-unit">active bergs</span>
             </div>
-            <span class="kpi-hint">EWE20 physics + 95% MC dispersion</span>
+            <span class="kpi-hint">EWE20 drift physics &amp; 95% MC dispersion</span>
           </div>
         </div>
 
         <!-- Iceberg Details List -->
-        <div class="iceberg-list-card">
+        <div class="iceberg-list-card glass-panel">
           <span class="kpi-label">Active Hazard Roster</span>
           <div class="iceberg-scroll-list" id="iceberg-list">
             <div class="iceberg-empty-state">Run a route to see active hazards</div>
@@ -262,13 +303,27 @@
     </div>
 
     <!-- Bottom Timeline Scrubber -->
-    <footer class="timeline-footer">
+    <footer class="timeline-footer glass-footer">
       <div class="playback-controls">
-        <button class="btn-play" id="btn-play" title="Play 7-Day Drift Animation">
-          <span id="play-icon">&#x25B6;</span>
+        <button class="btn-play" id="btn-play" title="Play Drift & Voyage Progression">
+          <span id="play-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <polygon points="6 4 20 12 6 20 6 4"></polygon>
+            </svg>
+          </span>
         </button>
-        <button class="btn-step" id="btn-prev" title="Previous Day">&#x23EE;</button>
-        <button class="btn-step" id="btn-next" title="Next Day">&#x23ED;</button>
+        <button class="btn-step" id="btn-prev" title="Previous Day">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="19 20 9 12 19 4 19 20"></polygon>
+            <line x1="5" y1="19" x2="5" y2="5"></line>
+          </svg>
+        </button>
+        <button class="btn-step" id="btn-next" title="Next Day">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            <line x1="19" y1="5" x2="19" y2="19"></line>
+          </svg>
+        </button>
       </div>
 
       <div class="scrubber-track-container">
@@ -287,7 +342,7 @@
 
       <div class="timeline-indicator">
         <span class="indicator-tag" id="current-day-label">Day 0 / 7</span>
-        <span class="indicator-date" id="current-date-label">&#x2014;</span>
+        <span class="indicator-date" id="current-date-label">&mdash;</span>
       </div>
     </footer>
   </div>
