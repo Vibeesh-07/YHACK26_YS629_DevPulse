@@ -25,13 +25,46 @@ RHO_ICE = 900.0  # kg / m^3
 
 def compute_corridor_bbox(start_coords, dest_coords, buffer_lat=1.5, buffer_lon=2.5):
     """
-    Compute geographic bounding box for the ship navigation corridor
-    with a buffer margin around the start and destination points.
+    Compute geographic bounding box for the ship navigation corridor.
+    Intelligently inspects any intersecting landmasses (e.g. South America, Antarctic Peninsula)
+    to ensure the corridor bounding box includes open-water passages (like Drake Passage around
+    Cape Horn or Bransfield Strait around Prime Head) so routes never get clipped by grid boundaries.
     """
     min_lat = min(start_coords[0], dest_coords[0]) - buffer_lat
     max_lat = max(start_coords[0], dest_coords[0]) + buffer_lat
     min_lon = min(start_coords[1], dest_coords[1]) - buffer_lon
     max_lon = max(start_coords[1], dest_coords[1]) + buffer_lon
+
+    try:
+        from src.data.land_mask import _build_merged_geometry
+        from shapely.geometry import LineString
+        geom = _build_merged_geometry()
+        if geom is not None:
+            line = LineString([(start_coords[1], start_coords[0]), (dest_coords[1], dest_coords[0])])
+            if line.intersects(geom):
+                for g in (geom.geoms if hasattr(geom, 'geoms') else [geom]):
+                    if g.intersects(line):
+                        g_min_lon, g_min_lat, g_max_lon, g_max_lat = g.bounds
+                        # Continental South America (extends north, but Cape Horn/Drake Passage is at -56° to -60°)
+                        if g_max_lat > -20.0 and g_min_lat < -40.0:
+                            min_lat = min(min_lat, -58.5)
+                        # Antarctica / Antarctic Peninsula (extends south, but Prime Head is at -63.23°)
+                        elif g_min_lat <= -80.0:
+                            max_lat = max(max_lat, -61.5)
+                        else:
+                            # Specific island or local headland: expand bounds so ship can route around
+                            min_lat = min(min_lat, g_min_lat - 1.5)
+                            max_lat = max(max_lat, g_max_lat + 1.5)
+                            min_lon = min(min_lon, g_min_lon - 2.0)
+                            max_lon = max(max_lon, g_max_lon + 2.0)
+    except Exception:
+        pass
+
+    # Ensure bounds stay within valid geographic coordinates
+    min_lat = max(-80.0, min_lat)
+    max_lat = min(80.0, max_lat)
+    min_lon = max(-180.0, min_lon)
+    max_lon = min(180.0, max_lon)
 
     return {
         "min_lat": round(float(min_lat), 2),

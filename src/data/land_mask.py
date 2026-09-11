@@ -162,13 +162,15 @@ def build_land_mask_grid(lats, lons):
             corridor_box = box(min_lon - 0.5, min_lat - 0.5, max_lon + 0.5, max_lat + 0.5)
 
             local_geom = geom.intersection(corridor_box)
+            # Add coastal safety margin buffer (~0.7 nm) to prevent ships clipping rocky coastlines
+            buffered_geom = local_geom.buffer(0.012)
             if hasattr(shapely, "prepare"):
-                shapely.prepare(local_geom)
+                shapely.prepare(buffered_geom)
 
-            flat = contains_xy(local_geom, LON_2D.ravel(), LAT_2D.ravel())
+            flat = contains_xy(buffered_geom, LON_2D.ravel(), LAT_2D.ravel())
             shapely_grid = flat.reshape(nrows, ncols)
             land_grid = np.logical_or(land_grid, shapely_grid)
-            log.info(f"Combined land grid: {land_grid.sum()}/{land_grid.size} cells blocked.")
+            log.info(f"Combined land grid: {land_grid.sum()}/{land_grid.size} cells blocked (with coastal standoff).")
         except Exception as e:
             try:
                 from shapely.prepared import prep
@@ -189,6 +191,31 @@ def build_land_mask_grid(lats, lons):
 
     land_fn = build_land_mask_fn()
     return land_grid, land_fn
+
+
+def find_nearest_water_coord(coord, land_mask_fn=None, max_search_nm=30.0):
+    """
+    If coord is on land, finds the closest navigable open-water coordinate.
+    Returns: [lat, lon] rounded to 4 decimals.
+    """
+    if land_mask_fn is None:
+        land_mask_fn = build_land_mask_fn()
+
+    if not land_mask_fn(coord[0], coord[1]):
+        return [round(float(coord[0]), 4), round(float(coord[1]), 4)]
+
+    lat0, lon0 = float(coord[0]), float(coord[1])
+    cos_lat = max(0.1, np.cos(np.radians(lat0)))
+
+    for dist_nm in np.linspace(0.2, max_search_nm, int(max_search_nm * 5)):
+        deg_lat = dist_nm / 60.0
+        deg_lon = dist_nm / (60.0 * cos_lat)
+        for angle in np.linspace(0, 2 * np.pi, 36, endpoint=False):
+            test_lat = lat0 + deg_lat * np.sin(angle)
+            test_lon = lon0 + deg_lon * np.cos(angle)
+            if not land_mask_fn(test_lat, test_lon):
+                return [round(float(test_lat), 4), round(float(test_lon), 4)]
+    return [round(float(coord[0]), 4), round(float(coord[1]), 4)]
 
 
 def _fallback_land_mask(lat, lon):

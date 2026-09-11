@@ -36,6 +36,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=WEB_DIR, **kwargs)
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self):
         if self.path == "/api/state":
             self._handle_get_state()
@@ -89,7 +95,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(content_len).decode("utf-8")
             params = json.loads(body) if body else {}
 
-            start_coords = params.get("start_coords", [-63.5, -58.2])
+            start_coords = params.get("start_coords", [-63.3, -58.3])
             dest_coords = params.get("dest_coords", [-60.8, -52.4])
             date_str = params.get("date", "2026-09-10T00:00:00Z")
             days_raw = params.get("days", 7)

@@ -79,6 +79,36 @@ class DriftSimulator:
         default_len = clean_len[-1] if clean_len else float(L)
         default_wid = clean_wid[-1] if clean_wid else float(W)
 
+        # Extract and structure calved daughter iceberg fragments
+        daughters = []
+        raw_children = res.get("children", [])
+        for k, child in enumerate(raw_children[:2]):  # Track top 2 calved fragments per parent
+            calved_day = int(child.get("start_index", 1))
+            c_lat = [float(x) for x in child.get("lat", []) if not np.isnan(x)]
+            c_lon = [float(x) for x in child.get("lon", []) if not np.isnan(x)]
+            c_len = [float(x) for x in child.get("length", []) if not np.isnan(x)]
+            c_wid = [float(x) for x in child.get("width", []) if not np.isnan(x)]
+            c_vol = [float(x) for x in child.get("vol", []) if not np.isnan(x)]
+
+            if len(c_lat) > 0:
+                d_traj = {}
+                for step in range(len(c_lat)):
+                    target_day = calved_day + step
+                    d_traj[target_day] = {
+                        "day": target_day,
+                        "lat": round(c_lat[step], 4),
+                        "lon": round(c_lon[step], 4),
+                        "length_m": round(c_len[step] if step < len(c_len) else c_len[-1], 1),
+                        "width_m": round(c_wid[step] if step < len(c_wid) else c_wid[-1], 1),
+                        "volume_m3": round(c_vol[step] if step < len(c_vol) else c_vol[-1], 1),
+                    }
+                daughters.append({
+                    "id": f"{berg_info['id']}-D{k+1}",
+                    "parent_id": berg_info["id"],
+                    "calved_day": calved_day,
+                    "trajectory_by_day": d_traj
+                })
+
         return {
             "id": berg_info["id"],
             "days_simulated": n_days,
@@ -95,7 +125,8 @@ class DriftSimulator:
                 }
                 for d in range(n_days)
             ],
-            "calved_children_count": len(res.get("children", []))
+            "calved_children_count": len(res.get("children", [])),
+            "daughters": daughters
         }
 
 
@@ -104,6 +135,7 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
     STEP 2: Main execution function.
     Takes Step 1 output state and simulates forward drift for all corridor icebergs
     over the voyage horizon (Day 0 departure through Day X destination).
+    Includes dynamically calved daughter icebergs in daily hazard obstacles.
     """
     simulator = DriftSimulator(climatology_path)
 
@@ -132,14 +164,45 @@ def execute_step2(step1_state, forecast_days=7, climatology_path=DEFAULT_CLIMATO
         safety_buffer_nm=3.0
     )
 
-    # Convert simulations into day-by-day hazard states using Monte Carlo 95% bounds
+    # Convert simulations into day-by-day hazard states using Monte Carlo 95% bounds + Calved Daughters
     daily_hazard_states = []
     start_coords = step1_state.get("start_coords", [-63.5, -58.2])
     dest_coords = step1_state.get("dest_coords", [-60.8, -52.4])
 
     for day_idx in range(n_sim_days):
         day_num = day_idx
-        hazards_for_day = hazards_by_day.get(day_num, [])
+        hazards_for_day = list(hazards_by_day.get(day_num, []))
+
+        # Integrate active calved daughter icebergs that have separated by day_num
+        for sim_res in simulations:
+            for daughter in sim_res.get("daughters", []):
+                if day_num in daughter["trajectory_by_day"]:
+                    pt = daughter["trajectory_by_day"][day_num]
+                    length_m = pt["length_m"]
+                    width_m = pt["width_m"]
+                    vol_m3 = pt["volume_m3"]
+                    r_nm = round(np.sqrt(length_m * width_m) / (2.0 * 1852.0), 2)
+                    r_nm = max(0.3, r_nm)
+                    buf_nm = round(r_nm + 1.8, 2)  # Standoff safety ring around calved fragment
+
+                    hazards_for_day.append({
+                        "id": daughter["id"],
+                        "parent_id": daughter["parent_id"],
+                        "is_daughter": True,
+                        "calved_day": daughter["calved_day"],
+                        "center": [pt["lat"], pt["lon"]],
+                        "iceberg_radius_nm": r_nm,
+                        "mc_95_dispersion_nm": 0.8,
+                        "buffer_radius_nm": buf_nm,
+                        "total_hazard_radius_nm_uncapped": buf_nm,
+                        "length_km": round(length_m / 1000.0, 2),
+                        "width_km": round(width_m / 1000.0, 2),
+                        "volume_km3": round(vol_m3 / 1e9, 4)
+                    })
+
+        daughter_count = sum(1 for h in hazards_for_day if h.get("is_daughter"))
+        if daughter_count > 0:
+            print(f"  * Day {day_num}: {len(hazards_for_day)} hazards tracked ({daughter_count} calved daughter fragments active)")
 
         day_state = {
             "day": day_num,

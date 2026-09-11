@@ -258,6 +258,11 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
+.symbol-daughter {
+  background: #f43f5e;
+  box-shadow: 0 0 6px #f43f5e;
+}
+
 .symbol-buffer {
   background: rgba(245, 158, 11, 0.12);
   border: 1.5px dashed var(--nav-caution);
@@ -915,6 +920,32 @@ body {
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--ice-cyan);
+}
+
+.iceberg-daughter-row {
+  border-left: 3px solid #f43f5e !important;
+  background: rgba(244, 63, 94, 0.05);
+}
+
+.iceberg-daughter-row:hover {
+  border-color: #f43f5e !important;
+  background: rgba(244, 63, 94, 0.12) !important;
+}
+
+.daughter-name {
+  color: #f43f5e !important;
+}
+
+.daughter-tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  border-radius: 3px;
+  padding: 1px 4px;
+  letter-spacing: 0.04em;
+  font-family: var(--font-sans);
 }
 
 .iceberg-meta {

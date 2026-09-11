@@ -47,6 +47,7 @@ def prune_waypoints(waypoints, min_distance_nm=4.0, land_mask_fn=None):
     for i in range(1, len(waypoints) - 1):
         prev = pruned[-1]
         curr = waypoints[i]
+        next_pt = waypoints[i + 1]
         d = haversine_nm(prev[0], prev[1], curr[0], curr[1])
         if d >= min_distance_nm:
             # If land_mask_fn is provided, ensure shortcut from prev to curr doesn't cut land
@@ -57,6 +58,12 @@ def prune_waypoints(waypoints, min_distance_nm=4.0, land_mask_fn=None):
                     if waypoints[i - 1] != prev:
                         pruned.append(waypoints[i - 1])
             pruned.append(curr)
+        elif land_mask_fn is not None:
+            # If skipping curr causes direct line from prev to next_pt to clip land, keep curr!
+            sample_lats = np.linspace(prev[0], next_pt[0], 6)
+            sample_lons = np.linspace(prev[1], next_pt[1], 6)
+            if any(land_mask_fn(la, lo) for la, lo in zip(sample_lats, sample_lons)):
+                pruned.append(curr)
 
     # Check connection to final destination
     if land_mask_fn is not None and len(pruned) > 0:
@@ -71,8 +78,7 @@ def prune_waypoints(waypoints, min_distance_nm=4.0, land_mask_fn=None):
 def smooth_route_polyline(waypoints, density_per_segment=6, land_mask_fn=None):
     """
     Takes discrete A* waypoints and generates a smooth, curved nautical route polyline.
-    If land_mask_fn is supplied, verifies each spline segment and falls back to
-    safe linear interpolation if a curved segment clips land.
+    Strictly verifies each spline segment and ensures 100% of waypoints remain in open water.
     """
     if len(waypoints) <= 2:
         return waypoints
@@ -106,17 +112,27 @@ def smooth_route_polyline(waypoints, density_per_segment=6, land_mask_fn=None):
                     break
 
         if clipped_land:
-            # Fallback to safe linear segment between p1 and p2
+            # Fallback to linear segment between p1 and p2
             lats = np.linspace(p1[0], p2[0], density_per_segment)
             lons = np.linspace(p1[1], p2[1], density_per_segment)
-            cand_pts = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
-            if land_mask_fn is not None and any(land_mask_fn(pt[0], pt[1]) for pt in cand_pts):
+            linear_pts = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
+            # If linear fallback also touches land, strictly use endpoints
+            if land_mask_fn is not None and any(land_mask_fn(pt[0], pt[1]) for pt in linear_pts):
                 segment_pts = [p1, p2]
             else:
-                segment_pts = cand_pts
+                segment_pts = linear_pts
 
         smoothed.extend(segment_pts[1:])
 
     # Guarantee destination matches exactly
     smoothed[-1] = clean_pts[-1]
+
+    # Airtight final guarantee: snap any stray points touching land to nearest navigable water
+    if land_mask_fn is not None:
+        from src.data.land_mask import find_nearest_water_coord
+        smoothed = [
+            find_nearest_water_coord(pt, land_mask_fn) if land_mask_fn(pt[0], pt[1]) else pt
+            for pt in smoothed
+        ]
+
     return smoothed

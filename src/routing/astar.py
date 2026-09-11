@@ -40,8 +40,6 @@ def check_direct_path_clear(cost_grid, start_coords, dest_coords, hazards, safet
     n_samples = max(30, min(150, int(dist_nm / 0.5)))
     lats = np.linspace(start_coords[0], dest_coords[0], n_samples)
     lons = np.linspace(start_coords[1], dest_coords[1], n_samples)
-    direct_waypoints = [[round(float(la), 4), round(float(lo), 4)] for la, lo in zip(lats, lons)]
-
     # Verify cost grid impassable cells (pack ice, shallow bathymetry)
     for p in direct_waypoints:
         r, c = cost_grid.coords_to_node(p[0], p[1])
@@ -77,6 +75,14 @@ def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards, allow_d
     Returns:
       dict with waypoints, total_distance_nm, path_cost, and nodes_evaluated.
     """
+    # Ensure start and dest coordinates are in open water
+    if cost_grid.land_mask_fn:
+        from src.data.land_mask import find_nearest_water_coord
+        if cost_grid.land_mask_fn(start_coords[0], start_coords[1]):
+            start_coords = find_nearest_water_coord(start_coords, cost_grid.land_mask_fn)
+        if cost_grid.land_mask_fn(dest_coords[0], dest_coords[1]):
+            dest_coords = find_nearest_water_coord(dest_coords, cost_grid.land_mask_fn)
+
     # ── Fast Path: Check if direct line is unobstructed ──────────────────────
     if allow_direct:
         is_clear, reason, closest_h_dist, direct_waypoints = check_direct_path_clear(
@@ -181,7 +187,27 @@ def find_risk_aware_route(cost_grid, start_coords, dest_coords, hazards, allow_d
                 f_n = tentative_g + h_n
                 heapq.heappush(open_heap, (f_n, h_n, (nr, nc)))
 
-    # Fallback if path blocked completely
+    # Fallback if path blocked completely: navigate to the closest reachable water position
+    if visited:
+        best_visited = min(visited, key=lambda n: heuristic(n[0], n[1]))
+        path = [best_visited]
+        curr = best_visited
+        while curr in came_from:
+            curr = came_from[curr]
+            path.append(curr)
+        path.reverse()
+        fallback_wps = [[float(start_coords[0]), float(start_coords[1])]]
+        for r, c in path[1:]:
+            lat, lon = cost_grid.node_to_coords(r, c)
+            fallback_wps.append([round(lat, 4), round(lon, 4)])
+        return {
+            "success": False,
+            "waypoints": fallback_wps,
+            "total_distance_nm": round(haversine_nm(start_coords[0], start_coords[1], dest_coords[0], dest_coords[1]), 2),
+            "path_cost": float("inf"),
+            "nodes_evaluated": nodes_evaluated
+        }
+
     return {
         "success": False,
         "waypoints": [[start_coords[0], start_coords[1]], [dest_coords[0], dest_coords[1]]],
