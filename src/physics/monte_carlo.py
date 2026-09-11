@@ -214,7 +214,6 @@ def compute_corridor_monte_carlo_hazards(icebergs, start_datetime, era5, ocean_c
                 )
                 hazards_by_day[day_num].append({
                     "id": res["id"],
-                    "is_daughter": False,
                     "center": st["centroid"],
                     "iceberg_radius_nm": r_iceberg,
                     "mc_95_dispersion_nm": st["mc_95_dispersion_nm"],

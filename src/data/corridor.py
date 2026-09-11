@@ -99,10 +99,22 @@ def estimate_iceberg_physics(area_km2):
     }
 
 
-def filter_icebergs_in_corridor(corridor_bbox, dataset_dir="./dataset", initial_contract="src/contracts/initial_state.json", max_icebergs=5):
+def haversine_nm(lat1, lon1, lat2, lon2):
+    """Calculates great-circle distance in nautical miles between two coords."""
+    R_nm = 3440.065
+    phi1, phi2 = np.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlam = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2.0)**2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2.0)**2
+    return float(R_nm * 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a)))
+
+
+def filter_icebergs_in_corridor(corridor_bbox, dataset_dir="./dataset", initial_contract="src/contracts/initial_state.json", max_icebergs=5, min_separation_nm=25.0):
     """
     Find icebergs within the navigation corridor.
     Checks existing contract icebergs first, then scans observation dataset.
+    Enforces a minimum spatial separation (min_separation_nm=25.0) so that multiple
+    icebergs never cluster or concentrate in the same location along the corridor.
     """
     b = corridor_bbox
     icebergs = []
@@ -116,6 +128,8 @@ def filter_icebergs_in_corridor(corridor_bbox, dataset_dir="./dataset", initial_
                 for berg in contract_data.get("icebergs", []):
                     lat, lon = berg["lat"], berg["lon"]
                     if b["min_lat"] <= lat <= b["max_lat"] and b["min_lon"] <= lon <= b["max_lon"]:
+                        if any(haversine_nm(lat, lon, ex["lat"], ex["lon"]) < min_separation_nm for ex in icebergs):
+                            continue
                         icebergs.append(berg)
                         seen_ids.add(berg["id"].lower())
         except Exception:
@@ -140,12 +154,19 @@ def filter_icebergs_in_corridor(corridor_bbox, dataset_dir="./dataset", initial_
                 ]
                 if len(in_corridor) > 0:
                     last_row = in_corridor.iloc[-1]
+                    cand_lat = round(float(last_row["lat"]), 3)
+                    cand_lon = round(float(last_row["lon"]), 3)
+
+                    # Enforce minimum spatial separation so icebergs never cluster in one spot
+                    if any(haversine_nm(cand_lat, cand_lon, ex["lat"], ex["lon"]) < min_separation_nm for ex in icebergs):
+                        continue
+
                     area = float(last_row["size"])
                     phys = estimate_iceberg_physics(area)
                     icebergs.append({
                         "id": berg_id,
-                        "lat": round(float(last_row["lat"]), 3),
-                        "lon": round(float(last_row["lon"]), 3),
+                        "lat": cand_lat,
+                        "lon": cand_lon,
                         "length_km": phys["length_km"],
                         "width_km": phys["width_km"],
                         "thickness_m": phys["thickness_m"],

@@ -42,8 +42,8 @@ function haversineNmJs(lat1, lon1, lat2, lon2) {
   const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
   const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
   const a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-            Math.cos(phi1) * Math.cos(phi2) *
-            Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+    Math.cos(phi1) * Math.cos(phi2) *
+    Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R_nm * c;
 }
@@ -121,15 +121,15 @@ function makeVesselPopup(dayData, ship) {
     <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px">
       <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
       ${(ship.progress_pct >= 100 || ship.distance_remaining_nm === 0)
-        ? `<div style="margin:5px 0;padding:4px 6px;background:#f0fdf4;border-radius:4px;border-left:3px solid #10b981">
+      ? `<div style="margin:5px 0;padding:4px 6px;background:#f0fdf4;border-radius:4px;border-left:3px solid #10b981">
              <strong style="color:#15803d">&#x2714; Voyage Completed (100%)</strong><br>
              <span style="font-size:10.5px;color:#166534">Arrived at destination</span>
            </div>`
-        : `<div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
+      : `<div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
              <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
              <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
            </div>`
-      }
+    }
       <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
       <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
       <span style="color:#555">Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
@@ -166,12 +166,12 @@ function initMap() {
     { maxZoom: 16, attribution: "Esri" }
   ).addTo(map);
 
-  routeLayerGroup     = L.layerGroup().addTo(map);
-  wakeLayerGroup      = L.layerGroup().addTo(map);
-  shipLayerGroup      = L.layerGroup().addTo(map);
-  hazardsLayerGroup   = L.layerGroup().addTo(map);
+  routeLayerGroup = L.layerGroup().addTo(map);
+  wakeLayerGroup = L.layerGroup().addTo(map);
+  shipLayerGroup = L.layerGroup().addTo(map);
+  hazardsLayerGroup = L.layerGroup().addTo(map);
   waypointsLayerGroup = L.layerGroup().addTo(map);
-  draftMarkersGroup   = L.layerGroup().addTo(map);
+  draftMarkersGroup = L.layerGroup().addTo(map);
 
   // Map click handler for waypoint picking
   map.on("click", onMapClick);
@@ -221,8 +221,8 @@ async function loadState() {
       if (nav) {
         document.getElementById("input-start-lat").value = nav.start.coords[0];
         document.getElementById("input-start-lon").value = nav.start.coords[1];
-        document.getElementById("input-dest-lat").value  = nav.destination.coords[0];
-        document.getElementById("input-dest-lon").value  = nav.destination.coords[1];
+        document.getElementById("input-dest-lat").value = nav.destination.coords[0];
+        document.getElementById("input-dest-lon").value = nav.destination.coords[1];
       }
       const daysInput = document.getElementById("input-days");
       if (daysInput) daysInput.value = totalDays;
@@ -248,8 +248,8 @@ function renderDay(dayNum) {
   const dayTitle = dayData.day === 0
     ? `Route status — Day 0 of ${totalDays} (Departure)`
     : (dayData.day === totalDays
-        ? `Route status — Day ${totalDays} of ${totalDays} (Arrival)`
-        : `Route status — Day ${dayData.day} of ${totalDays}`);
+      ? `Route status — Day ${totalDays} of ${totalDays} (Arrival)`
+      : `Route status — Day ${dayData.day} of ${totalDays}`);
   document.getElementById("header-status-title").textContent = dayTitle;
   document.getElementById("badge-hazards-text").textContent =
     `${dayData.status.hazards_nearby} hazards nearby`;
@@ -260,7 +260,7 @@ function renderDay(dayNum) {
 
   // KPIs
   document.getElementById("kpi-distance").textContent = dayData.kpis.route_distance_nm;
-  document.getElementById("kpi-hazard").textContent   = dayData.kpis.closest_hazard_nm;
+  document.getElementById("kpi-hazard").textContent = dayData.kpis.closest_hazard_nm;
   document.getElementById("kpi-icebergs").textContent = dayData.kpis.icebergs_tracked;
 
   // Vessel Speed & Motion KPIs
@@ -328,7 +328,7 @@ function renderMapLayers(dayData, ship) {
 
   const nav = dayData.navigation;
   const start = nav.start.coords;
-  const dest  = nav.destination.coords;
+  const dest = nav.destination.coords;
 
   // Start marker
   L.marker(start, { icon: makeWaypointIcon("#10b981", "S") })
@@ -409,11 +409,12 @@ function renderMapLayers(dayData, ship) {
       .addTo(shipLayerGroup);
   }
 
-  // Icebergs + MC hazard rings (day-specific positions)
-  (dayData.hazards || []).forEach(h => {
+  // Icebergs + MC hazard rings (day-specific positions) — Singular icebergs only
+  const singularHazards = (dayData.hazards || []).filter(h => !h.is_daughter);
+  singularHazards.forEach(h => {
     const center = h.center;
-    const rCoreM   = h.iceberg_radius_nm * METERS_PER_NM;
-    const rBufferM = h.buffer_radius_nm  * METERS_PER_NM;
+    const rCoreM = h.iceberg_radius_nm * METERS_PER_NM;
+    const rBufferM = h.buffer_radius_nm * METERS_PER_NM;
 
     L.circle(center, {
       radius: rBufferM,
@@ -429,9 +430,9 @@ function renderMapLayers(dayData, ship) {
 
     L.marker(center, {
       icon: L.divIcon({
-        className: "",
-        html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#38bdf8;text-shadow:0 1px 4px #000">${h.id}</span>`,
-        iconAnchor: [-8, 10]
+        className: "iceberg-label-marker",
+        html: `<div class="iceberg-map-label"><span class="iceberg-map-id">${h.id}</span></div>`,
+        iconAnchor: [-10, 10]
       })
     }).addTo(hazardsLayerGroup);
   });
@@ -441,7 +442,7 @@ function renderMapLayers(dayData, ship) {
     try {
       const bounds = L.latLngBounds(nav.route_polyline);
       map.fitBounds(bounds, { padding: [60, 80], animate: true, duration: 0.8 });
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -482,12 +483,13 @@ function makeIcebergPopup(h) {
 
 function renderIcebergList(hazards) {
   const container = document.getElementById("iceberg-list");
-  if (!hazards || hazards.length === 0) {
+  const singularHazards = (hazards || []).filter(h => !h.is_daughter);
+  if (!singularHazards || singularHazards.length === 0) {
     container.innerHTML = `<div class="iceberg-empty-state">No hazards in corridor</div>`;
     return;
   }
   container.innerHTML = "";
-  hazards.forEach(h => {
+  singularHazards.forEach(h => {
     const row = document.createElement("div");
     row.className = "iceberg-row";
     row.innerHTML = `
@@ -573,7 +575,7 @@ function updateDraftLine() {
   try {
     map.fitBounds(L.latLngBounds([[sLat, sLon], [dLat, dLon]]),
       { padding: [80, 100], animate: true });
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function updateTimelineControls(totalDays) {
@@ -628,7 +630,7 @@ function setupEventListeners() {
   });
 
   // Update draft line when coords change manually
-  ["input-start-lat","input-start-lon","input-dest-lat","input-dest-lon"].forEach(id => {
+  ["input-start-lat", "input-start-lon", "input-dest-lat", "input-dest-lon"].forEach(id => {
     document.getElementById(id).addEventListener("change", () => {
       draftMarkersGroup.clearLayers();
       updateDraftLine();
@@ -647,10 +649,10 @@ function setupEventListeners() {
 async function runRecalculate() {
   const startLat = parseFloat(document.getElementById("input-start-lat").value);
   const startLon = parseFloat(document.getElementById("input-start-lon").value);
-  const destLat  = parseFloat(document.getElementById("input-dest-lat").value);
-  const destLon  = parseFloat(document.getElementById("input-dest-lon").value);
-  const dateStr  = document.getElementById("input-date").value + "T00:00:00Z";
-  const days     = parseInt(document.getElementById("input-days").value) || 5;
+  const destLat = parseFloat(document.getElementById("input-dest-lat").value);
+  const destLon = parseFloat(document.getElementById("input-dest-lon").value);
+  const dateStr = document.getElementById("input-date").value + "T00:00:00Z";
+  const days = parseInt(document.getElementById("input-days").value) || 5;
 
   // Validate
   if (isNaN(startLat) || isNaN(startLon) || isNaN(destLat) || isNaN(destLon)) {
@@ -677,9 +679,9 @@ async function runRecalculate() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         start_coords: [startLat, startLon],
-        dest_coords:  [destLat, destLon],
-        date:         dateStr,
-        days:         days
+        dest_coords: [destLat, destLon],
+        date: dateStr,
+        days: days
       })
     });
 
@@ -701,13 +703,13 @@ async function runRecalculate() {
       const sCoords = nav.start.coords;
       const dCoords = nav.destination.coords;
       const startMoved = Math.abs(sCoords[0] - startLat) > 1e-4 || Math.abs(sCoords[1] - startLon) > 1e-4;
-      const destMoved  = Math.abs(dCoords[0] - destLat) > 1e-4 || Math.abs(dCoords[1] - destLon) > 1e-4;
+      const destMoved = Math.abs(dCoords[0] - destLat) > 1e-4 || Math.abs(dCoords[1] - destLon) > 1e-4;
 
       if (startMoved || destMoved) {
         document.getElementById("input-start-lat").value = sCoords[0];
         document.getElementById("input-start-lon").value = sCoords[1];
-        document.getElementById("input-dest-lat").value  = dCoords[0];
-        document.getElementById("input-dest-lon").value  = dCoords[1];
+        document.getElementById("input-dest-lat").value = dCoords[0];
+        document.getElementById("input-dest-lon").value = dCoords[1];
         let movedMsg = "Point on land marked down to nearby coast";
         if (startMoved && destMoved) movedMsg = "Start & destination marked down to nearby coast";
         else if (startMoved) movedMsg = "Starting point on land marked down to nearby coast";
@@ -799,7 +801,7 @@ function updateHeaderStatus(msg, isError) {
   title.textContent = msg;
   const dot = document.getElementById("pulse-dot");
   dot.style.background = isError ? "#ef4444" : "#10b981";
-  dot.style.boxShadow  = isError ? "0 0 10px #ef4444" : "0 0 10px #10b981";
+  dot.style.boxShadow = isError ? "0 0 10px #ef4444" : "0 0 10px #10b981";
 }
 
 // ─── Playback ─────────────────────────────────────────────────────────────────
