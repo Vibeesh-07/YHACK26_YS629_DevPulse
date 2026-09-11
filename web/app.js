@@ -97,44 +97,45 @@ function makeVesselIcon(ship) {
     className: "vessel-div-icon",
     html: `
       <div class="vessel-icon-container" title="Research Vessel Explorer">
+        <div class="radar-pulse-ring"></div>
         <svg class="vessel-marker-svg" viewBox="0 0 36 36" style="transform: rotate(${heading}deg);">
           <!-- Ship Hull pointing 0 deg (North) -->
           <path d="M18,2 L27,24 C27,28 22,32 18,34 C14,32 9,28 9,24 Z" 
-                fill="#0284c7" stroke="#38bdf8" stroke-width="1.8" />
+                fill="#0284c7" stroke="#38bdf8" stroke-width="2" />
           <!-- Superstructure -->
           <polygon points="18,8 23,22 18,19 13,22" fill="#e0f2fe" opacity="0.95" />
           <!-- Navigation mast light -->
-          <circle cx="18" cy="12" r="2.2" fill="#38bdf8" />
+          <circle cx="18" cy="12" r="2.5" fill="#f59e0b" />
           <!-- Bow guide line -->
           <line x1="18" y1="2" x2="18" y2="7" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
         </svg>
       </div>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
+    iconSize: [44, 44],
+    iconAnchor: [22, 22]
   });
 }
 
 function makeVesselPopup(dayData, ship) {
   return `
-    <div class="glass-popup">
-      <div class="popup-title">Research Vessel Explorer</div>
+    <div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:190px">
+      <strong style="color:#0284c7;font-size:13px">&#x1F6A2; Active Research Vessel</strong><br>
       ${(ship.progress_pct >= 100 || ship.distance_remaining_nm === 0)
-        ? `<div class="popup-status-badge badge-arrived">
-             <strong>Voyage Completed (100%)</strong><br>
-             <span>Arrived at destination</span>
+        ? `<div style="margin:5px 0;padding:4px 6px;background:#f0fdf4;border-radius:4px;border-left:3px solid #10b981">
+             <strong style="color:#15803d">&#x2714; Voyage Completed (100%)</strong><br>
+             <span style="font-size:10.5px;color:#166534">Arrived at destination</span>
            </div>`
-        : `<div class="popup-status-badge badge-enroute">
+        : `<div style="margin:5px 0;padding:4px 6px;background:#f0f9ff;border-radius:4px;border-left:3px solid #0284c7">
              <strong>Day ${dayData.day} of ${dayData.total_days}</strong> (${ship.progress_pct || 0}% completed)<br>
-             <span>Route re-planned from current vessel position</span>
+             <span style="font-size:10.5px;color:#0369a1">&#x27A4; Route re-planned from current vessel position</span>
            </div>`
       }
-      <div class="popup-row"><span>Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong></div>
-      <div class="popup-row"><span>Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong></div>
-      <div class="popup-row"><span>Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong></div>
-      <div class="popup-row"><span>Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong></div>
-      <div class="popup-row"><span>Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong></div>
-      <div class="popup-coords">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</div>
+      <span style="color:#555">Average Speed:</span> <strong>${ship.average_speed_knots || "—"} knots</strong><br>
+      <span style="color:#555">Daily Run:</span> <strong>${ship.daily_distance_nm || "—"} nm/day</strong><br>
+      <span style="color:#555">Traveled (Wake):</span> <strong>${ship.distance_traveled_nm || 0} nm</strong><br>
+      <span style="color:#555">Remaining:</span> <strong>${ship.distance_remaining_nm || 0} nm</strong><br>
+      <span style="color:#555">Current Heading:</span> <strong>${ship.heading_deg || 0}&deg;</strong><br>
+      <span style="color:#888;font-size:11px">[${(ship.coords ? ship.coords[0] : 0).toFixed(4)}, ${(ship.coords ? ship.coords[1] : 0).toFixed(4)}]</span>
     </div>
   `;
 }
@@ -174,6 +175,30 @@ function initMap() {
 
   // Map click handler for waypoint picking
   map.on("click", onMapClick);
+
+  // Real-time cursor coordinates tracking
+  map.on("mousemove", onMapMouseMove);
+  map.on("mouseout", onMapMouseOut);
+}
+
+function onMapMouseMove(e) {
+  const lat = e.latlng.lat;
+  const lon = e.latlng.lng;
+  const latDir = lat >= 0 ? "N" : "S";
+  const lonDir = lon >= 0 ? "E" : "W";
+  const latStr = `${Math.abs(lat).toFixed(4)}°${latDir}`;
+  const lonStr = `${Math.abs(lon).toFixed(4)}°${lonDir}`;
+  const el = document.getElementById("cursor-coords-text");
+  if (el) {
+    el.textContent = `${latStr}, ${lonStr}`;
+  }
+}
+
+function onMapMouseOut() {
+  const el = document.getElementById("cursor-coords-text");
+  if (el) {
+    el.innerHTML = "Cursor: &mdash;&deg;, &mdash;&deg;";
+  }
 }
 
 // ─── State Loading ────────────────────────────────────────────────────────────
@@ -225,8 +250,10 @@ function renderDay(dayNum) {
   document.getElementById("header-status-title").textContent = dayTitle;
   document.getElementById("badge-hazards-text").textContent =
     `${dayData.status.hazards_nearby} hazards nearby`;
-  document.getElementById("badge-confidence-text").textContent =
-    `${dayData.status.route_confidence_pct}% confidence`;
+  const confEl = document.getElementById("badge-confidence-text");
+  if (confEl) {
+    confEl.textContent = `${dayData.status.route_confidence_pct}% confidence`;
+  }
 
   // KPIs
   document.getElementById("kpi-distance").textContent = dayData.kpis.route_distance_nm;
@@ -301,14 +328,14 @@ function renderMapLayers(dayData, ship) {
   const dest  = nav.destination.coords;
 
   // Start marker
-  L.marker(start, { icon: makeWaypointIcon("#2dd4bf", "S") })
-    .bindTooltip(`Origin: [${start[0].toFixed(3)}, ${start[1].toFixed(3)}]`,
+  L.marker(start, { icon: makeWaypointIcon("#10b981", "S") })
+    .bindTooltip(`Start: [${start[0].toFixed(3)}, ${start[1].toFixed(3)}]`,
       { permanent: false, direction: "left" })
     .addTo(waypointsLayerGroup);
 
   // Destination marker
-  L.marker(dest, { icon: makeWaypointIcon("#fbbf24", "D") })
-    .bindTooltip(`Destination: [${dest[0].toFixed(3)}, ${dest[1].toFixed(3)}]`,
+  L.marker(dest, { icon: makeWaypointIcon("#f59e0b", "D") })
+    .bindTooltip(`Dest: [${dest[0].toFixed(3)}, ${dest[1].toFixed(3)}]`,
       { permanent: false, direction: "right" })
     .addTo(waypointsLayerGroup);
 
@@ -339,15 +366,24 @@ function renderMapLayers(dayData, ship) {
     : (!isArrived && nav.route_polyline && nav.route_polyline.length > 1 ? nav.route_polyline : null);
 
   if (forwardPoints && forwardPoints.length > 1) {
-    // Primary dynamic forward route line (clean, crisp, no glow)
+    // Outer emerald glow
     L.polyline(forwardPoints, {
-      color: "#2dd4bf",
+      color: "#10b981",
+      weight: 10,
+      opacity: 0.22,
+      lineCap: "round",
+      lineJoin: "round"
+    }).addTo(routeLayerGroup);
+
+    // Primary dynamic forward route line
+    L.polyline(forwardPoints, {
+      color: "#10b981",
       weight: 3.5,
       opacity: 0.95,
       lineCap: "round",
       lineJoin: "round"
     })
-      .bindTooltip(`Dynamic route (${ship.distance_remaining_nm || 0} nm remaining)`, {
+      .bindTooltip(`Dynamic route from current position (${ship.distance_remaining_nm || 0} nm remaining)`, {
         permanent: false,
         direction: "center"
       })
@@ -357,8 +393,8 @@ function renderMapLayers(dayData, ship) {
   // Moving Ship Marker (positioned at current position P_d)
   if (ship && ship.coords) {
     const vesselTooltipText = isArrived
-      ? `MV Explorer — Day ${dayData.day} (100% — Arrived at Destination)`
-      : `MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`;
+      ? `🚢 MV Explorer — Day ${dayData.day} (100% — Arrived at Destination)`
+      : `🚢 MV Explorer — Day ${dayData.day} (${ship.progress_pct}% — ${ship.average_speed_knots} kn) [Origin of Day ${dayData.day} Route]`;
 
     L.marker(ship.coords, {
       icon: makeVesselIcon(ship),
@@ -376,49 +412,25 @@ function renderMapLayers(dayData, ship) {
     const rCoreM   = h.iceberg_radius_nm * METERS_PER_NM;
     const rBufferM = h.buffer_radius_nm  * METERS_PER_NM;
 
-    if (h.is_daughter) {
-      // Calved daughter fragment: coral core with amber-orange repulsion ring
-      L.circle(center, {
-        radius: rBufferM,
-        color: "#fb923c", dashArray: "4,4",
-        weight: 1.5, fillColor: "#fb923c", fillOpacity: 0.08
-      }).addTo(hazardsLayerGroup);
+    L.circle(center, {
+      radius: rBufferM,
+      color: "#f59e0b", dashArray: "5,5",
+      weight: 1.5, fillColor: "#f59e0b", fillOpacity: 0.07
+    }).addTo(hazardsLayerGroup);
 
-      L.circle(center, {
-        radius: rCoreM,
-        color: "#f43f5e", weight: 2,
-        fillColor: "#f43f5e", fillOpacity: 0.85
-      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
+    L.circle(center, {
+      radius: rCoreM,
+      color: "#38bdf8", weight: 2,
+      fillColor: "#38bdf8", fillOpacity: 0.8
+    }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
 
-      L.marker(center, {
-        icon: L.divIcon({
-          className: "",
-          html: `<span style="font-family:var(--font-mono);font-size:9.5px;font-weight:700;color:#f43f5e;background:rgba(244,63,94,0.18);padding:1px 4px;border-radius:3px;border:1px solid rgba(244,63,94,0.4);cursor:pointer">${h.id}</span>`,
-          iconAnchor: [-8, 10]
-        })
-      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
-    } else {
-      // Parent tabular iceberg: cyan core with standard amber MC uncertainty ring
-      L.circle(center, {
-        radius: rBufferM,
-        color: "#fbbf24", dashArray: "5,5",
-        weight: 1.5, fillColor: "#fbbf24", fillOpacity: 0.08
-      }).addTo(hazardsLayerGroup);
-
-      L.circle(center, {
-        radius: rCoreM,
-        color: "#38bdf8", weight: 2,
-        fillColor: "#38bdf8", fillOpacity: 0.85
-      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
-
-      L.marker(center, {
-        icon: L.divIcon({
-          className: "",
-          html: `<span style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:#7dd3fc;cursor:pointer">${h.id}</span>`,
-          iconAnchor: [-8, 10]
-        })
-      }).bindPopup(makeIcebergPopup(h)).addTo(hazardsLayerGroup);
-    }
+    L.marker(center, {
+      icon: L.divIcon({
+        className: "",
+        html: `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#38bdf8;text-shadow:0 1px 4px #000">${h.id}</span>`,
+        iconAnchor: [-8, 10]
+      })
+    }).addTo(hazardsLayerGroup);
   });
 
   // Pan map to fit route
@@ -433,9 +445,14 @@ function renderMapLayers(dayData, ship) {
 function makeWaypointIcon(color, label) {
   return L.divIcon({
     className: "",
-    html: `<div class="glass-waypoint" style="--wp-color: ${color};">
-      <span>${label}</span>
-    </div>`,
+    html: `<div style="
+      width:28px;height:28px;border-radius:50%;
+      background:${color};border:2.5px solid #fff;
+      box-shadow:0 0 14px ${color};
+      display:flex;align-items:center;justify-content:center;
+      font-family:'JetBrains Mono',monospace;font-size:11px;
+      font-weight:700;color:#fff;
+    ">${label}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14]
   });
@@ -445,37 +462,16 @@ function makeIcebergPopup(h) {
   const rawDisp = h.mc_95_dispersion_nm ? `${h.mc_95_dispersion_nm} nm` : "—";
   const uncapped = h.total_hazard_radius_nm_uncapped ? `${h.total_hazard_radius_nm_uncapped} nm` : null;
   const cappedLabel = uncapped && parseFloat(h.total_hazard_radius_nm_uncapped) > parseFloat(h.buffer_radius_nm)
-    ? `<span style="color:#fbbf24;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#94a3b8;font-size:10px">(capped)</span>`
+    ? `<span style="color:#f59e0b;font-weight:700">${h.buffer_radius_nm} nm</span> <span style="color:#888;font-size:10px">(capped)</span>`
     : `<strong>${h.buffer_radius_nm} nm</strong>`;
-
-  if (h.is_daughter) {
-    return `<div class="glass-popup">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-        <strong style="color:#f43f5e;font-size:13px;font-family:var(--font-heading)">${h.id}</strong>
-        <span style="background:rgba(244,63,94,0.15);color:#f43f5e;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid rgba(244,63,94,0.4)">CALVED FRAGMENT</span>
-      </div>
-      <div class="popup-row"><span>Parent Origin:</span> <strong>${h.parent_id || 'Unknown'} (Day ${h.calved_day !== undefined ? h.calved_day : '—'})</strong></div>
-      <div class="popup-row"><span>Fragment Size:</span> <strong>${h.length_m ? Math.round(h.length_m) : '—'}m × ${h.width_m ? Math.round(h.width_m) : '—'}m</strong></div>
-      <div class="popup-row"><span>Physical Radius:</span> <strong>${h.iceberg_radius_nm} nm</strong></div>
-      <div class="popup-row"><span>95% Drift Spread:</span> <strong>${rawDisp}</strong></div>
-      <div class="popup-divider"></div>
-      <div class="popup-row"><span>Avoidance Zone:</span> ${cappedLabel}</div>
-      <div class="popup-hint" style="color:#34d399">A* router actively cleared fragment</div>
-      <div class="popup-coords">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</div>
-    </div>`;
-  }
-
-  return `<div class="glass-popup">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-      <strong style="color:#38bdf8;font-size:13px;font-family:var(--font-heading)">${h.id}</strong>
-      <span style="background:rgba(56,189,248,0.15);color:#38bdf8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid rgba(56,189,248,0.4)">PARENT ICEBERG</span>
-    </div>
-    <div class="popup-row"><span>Physical Radius:</span> <strong>${h.iceberg_radius_nm} nm</strong></div>
-    <div class="popup-row"><span>95% Drift Spread:</span> <strong>${rawDisp}</strong></div>
-    <div class="popup-divider"></div>
-    <div class="popup-row"><span>Avoidance Zone:</span> ${cappedLabel}</div>
-    <div class="popup-hint">A* router keeps ship outside this radius</div>
-    <div class="popup-coords">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</div>
+  return `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#111;min-width:180px;line-height:1.6">
+    <strong style="color:#0284c7;font-size:13px">${h.id}</strong><br>
+    <span style="color:#555">Physical radius:</span> <strong>${h.iceberg_radius_nm} nm</strong><br>
+    <span style="color:#555">95% MC drift spread:</span> <strong style="color:#888">${rawDisp}</strong><br>
+    <hr style="border:none;border-top:1px solid #ddd;margin:4px 0">
+    <span style="color:#555">Active avoidance zone:</span> ${cappedLabel}<br>
+    <span style="color:#888;font-size:10px">A* router keeps ship outside this radius</span><br>
+    <span style="color:#888;font-size:11px">[${h.center[0].toFixed(3)}, ${h.center[1].toFixed(3)}]</span>
   </div>`;
 }
 
@@ -490,38 +486,14 @@ function renderIcebergList(hazards) {
   container.innerHTML = "";
   hazards.forEach(h => {
     const row = document.createElement("div");
-    row.className = h.is_daughter ? "iceberg-row iceberg-daughter-row" : "iceberg-row";
-
-    if (h.is_daughter) {
-      row.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <div style="display:flex;align-items:center;gap:5px">
-            <span class="iceberg-id-tag" style="color:#f43f5e;border-color:rgba(244,63,94,0.4);background:rgba(244,63,94,0.12)">${h.id}</span>
-            <span class="daughter-tag" style="font-size:9px;font-weight:700;color:#f43f5e">CALVED</span>
-          </div>
-          <span style="font-size:0.65rem;color:var(--text-muted);font-family:var(--font-mono)">From: ${h.parent_id} (D${h.calved_day})</span>
-        </div>
-        <div class="iceberg-meta">
-          <div>Core: ${h.iceberg_radius_nm} nm</div>
-          <div>Zone: ${h.buffer_radius_nm} nm</div>
-        </div>
-      `;
-    } else {
-      row.innerHTML = `
-        <span class="iceberg-id-tag">${h.id}</span>
-        <div class="iceberg-meta">
-          <div>Core: ${h.iceberg_radius_nm} nm</div>
-          <div>Zone: ${h.buffer_radius_nm} nm</div>
-        </div>
-      `;
-    }
-
-    row.addEventListener("click", () => {
-      map.setView(h.center, 8, { animate: true });
-    });
-    container.appendChild(row);
-  });
-}
+    row.className = "iceberg-row";
+    row.innerHTML = `
+      <span class="iceberg-name">&#x25CF; ${h.id}</span>
+      <div class="iceberg-meta">
+        <div>Core: ${h.iceberg_radius_nm} nm</div>
+        <div>Zone: ${h.buffer_radius_nm} nm</div>
+      </div>
+    `;
     row.addEventListener("click", () => {
       map.setView(h.center, 8, { animate: true });
     });
@@ -558,17 +530,19 @@ function setPickMode(mode) {
   const badgeModeText = document.getElementById("badge-mode-text");
 
   if (mode === null) {
-    hint.classList.add("hidden");
-    map.getContainer().style.cursor = "";
-    badgeModeText.textContent = "Enter coords or pick on map";
+    if (hint) hint.classList.add("hidden");
+    if (map) map.getContainer().style.cursor = "";
+    if (badgeModeText) badgeModeText.textContent = "Enter coords or pick on map";
   } else {
-    hint.classList.remove("hidden");
-    hintPt.textContent = mode === "start" ? "Start" : "Destination";
-    cancelBtn.style.display = "inline-block";
-    map.getContainer().style.cursor = "crosshair";
-    badgeModeText.textContent = mode === "start"
-      ? "Click map to set Start point"
-      : "Click map to set Destination";
+    if (hint) hint.classList.remove("hidden");
+    if (hintPt) hintPt.textContent = mode === "start" ? "Start" : "Destination";
+    if (cancelBtn) cancelBtn.style.display = "inline-block";
+    if (map) map.getContainer().style.cursor = "crosshair";
+    if (badgeModeText) {
+      badgeModeText.textContent = mode === "start"
+        ? "Click map to set Start point"
+        : "Click map to set Destination";
+    }
   }
 }
 
@@ -834,6 +808,7 @@ function showLoading() {
     const el = document.getElementById(`lstep-${i}`);
     if (el) {
       el.className = "lstep";
+      el.innerHTML = "&#x2B21; " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
     }
   });
 }
@@ -841,11 +816,13 @@ function showLoading() {
 function hideLoading() {
   loadingStepTimers.forEach(t => clearTimeout(t));
   loadingStepTimers = [];
+  // Ensure all steps show as completed before closing overlay
   [1, 2, 3, 4].forEach(i => {
     const el = document.getElementById(`lstep-${i}`);
     if (el) {
       el.classList.remove("active");
       el.classList.add("done");
+      el.innerHTML = "✓ " + el.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
     }
   });
   setTimeout(() => {
@@ -864,6 +841,7 @@ function animateLoadingSteps() {
         if (prev) {
           prev.classList.remove("active");
           prev.classList.add("done");
+          prev.innerHTML = "✓ " + prev.textContent.replace(/^[✓⬡\u2B21\s]+/, "");
         }
       }
       const cur = document.getElementById(`lstep-${i + 1}`);
@@ -889,14 +867,11 @@ function updateHeaderStatus(msg, isError) {
   const title = document.getElementById("header-status-title");
   title.textContent = msg;
   const dot = document.getElementById("pulse-dot");
-  dot.style.background = isError ? "#f87171" : "#2dd4bf";
-  dot.style.boxShadow  = "none";
+  dot.style.background = isError ? "#ef4444" : "#10b981";
+  dot.style.boxShadow  = isError ? "0 0 10px #ef4444" : "0 0 10px #10b981";
 }
 
 // ─── Playback ─────────────────────────────────────────────────────────────────
-
-const PLAY_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>`;
-const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>`;
 
 function togglePlayback() {
   isPlaying = !isPlaying;
@@ -904,7 +879,7 @@ function togglePlayback() {
 
   if (isPlaying) {
     if (multiDayData.length === 0) { isPlaying = false; return; }
-    icon.innerHTML = PAUSE_ICON_SVG;
+    icon.textContent = "❚❚";
     playInterval = setInterval(() => {
       const maxDays = multiDayData.length > 0 ? (multiDayData[0].total_days || (multiDayData.length - 1)) : 7;
       let next = currentDay + 1;
@@ -912,7 +887,7 @@ function togglePlayback() {
       renderDay(next);
     }, 1500);
   } else {
-    icon.innerHTML = PLAY_ICON_SVG;
+    icon.textContent = "▶";
     clearInterval(playInterval);
   }
 }
