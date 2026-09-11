@@ -205,7 +205,10 @@ function onMapMouseOut() {
 
 async function loadState() {
   try {
-    const res = await fetch("/api/state");
+    let res = await fetch("/api/state");
+    if (!res.ok) {
+      res = await fetch("data/multi_day_route_state.json");
+    }
     if (!res.ok) throw new Error("Failed to fetch state");
     const data = await res.json();
     if (data && data.length > 0) {
